@@ -1,0 +1,1946 @@
+/* Extension-only styles. Baseline theme.css handles the heavy lifting;
+   this file only fills in DOM-shape adjustments for our injected scaffold
+   and a few sensible defaults that Obsidian's app shell normally provides.
+
+   READABILITY FALLBACKS (search for "READABILITY FALLBACK" below):
+     Baseline's `theme.css` only sets foreground/background CSS variables
+     when a `color-scheme-X` class (cupertino-dark, minimal-dark, etc.)
+     is ALSO present on body — the unqualified `.theme-dark{...}` blocks
+     define fonts/animations/code palette only. Presets that don't pick
+     a color scheme (e.g. Claude, the bare "default" preset) therefore
+     leave --text-normal unset, so dark-mode text would render as the
+     html/body `var(--text-normal, #222)` fallback — dark-grey on a dark
+     background, unreadable.
+
+     We patch this by giving `body.theme-light` and `body.theme-dark`
+     a neutral baseline of fg/bg/border variables at specificity (0,1,1)
+     = 11. Per-preset overrides land at the same specificity but come
+     later in the cascade (the preset's <style> is appended to <head>
+     after our content_scripts CSS), so they still win where set; and
+     theme.css's color-scheme compound rules (e.g.
+     `.theme-dark.adwaita-dark`) sit at (0,2,0) = 20, also winning. */
+
+/* ── READABILITY FALLBACK ─────────────────────────────────────────
+   Neutral fg/bg/border palette so text is readable when no preset (or
+   a preset without a `color-scheme-X` class, e.g. Claude) is active.
+   See the file header for the cascade analysis. */
+
+body.theme-light {
+  --background-primary: #ffffff;
+  --background-primary-alt: #fafafa;
+  --background-secondary: #f5f5f5;
+  --background-secondary-alt: #ebebeb;
+  --text-normal: #2e3338;
+  --text-muted: #6e7681;
+  --text-faint: #9aa0a6;
+  --text-on-accent: #ffffff;
+  --text-accent: #2c84db;
+  --text-accent-hover: #1e6fc4;
+  --text-selection: rgba(44, 132, 219, 0.18);
+  --text-highlight-bg: rgba(255, 208, 0, 0.40);
+  --interactive-accent: #2c84db;
+  --interactive-accent-hover: #1e6fc4;
+  --background-modifier-border: rgba(0, 0, 0, 0.08);
+  --background-modifier-border-hover: rgba(0, 0, 0, 0.14);
+  --background-modifier-border-focus: #2c84db;
+  --background-modifier-hover: rgba(0, 0, 0, 0.05);
+  --code-background: #f3f4f6;
+  --code-normal: #2e3338;
+  --tag-background: rgba(44, 132, 219, 0.12);
+  --tag-color: #2c84db;
+  --blockquote-border-color: #2c84db;
+  --blockquote-color: #6e7681;
+  --hr-color: rgba(0, 0, 0, 0.12);
+  --link-color: #2c84db;
+  --link-color-hover: #1e6fc4;
+}
+
+body.theme-dark {
+  --background-primary: #1e1e1e;
+  --background-primary-alt: #232323;
+  --background-secondary: #2a2a2a;
+  --background-secondary-alt: #1a1a1a;
+  --text-normal: #dcddde;
+  --text-muted: #b0b8c0;
+  --text-faint: #6e7681;
+  --text-on-accent: #ffffff;
+  --text-accent: #5aa6f1;
+  --text-accent-hover: #82bcf5;
+  --text-selection: rgba(90, 166, 241, 0.28);
+  --text-highlight-bg: rgba(255, 208, 0, 0.30);
+  --interactive-accent: #5aa6f1;
+  --interactive-accent-hover: #82bcf5;
+  --background-modifier-border: rgba(255, 255, 255, 0.10);
+  --background-modifier-border-hover: rgba(255, 255, 255, 0.18);
+  --background-modifier-border-focus: #5aa6f1;
+  --background-modifier-hover: rgba(255, 255, 255, 0.06);
+  --code-background: #2a2a2a;
+  --code-normal: #dcddde;
+  --tag-background: rgba(90, 166, 241, 0.18);
+  --tag-color: #5aa6f1;
+  --blockquote-border-color: #5aa6f1;
+  --blockquote-color: #9aa3ad;
+  --hr-color: rgba(255, 255, 255, 0.14);
+  --link-color: #5aa6f1;
+  --link-color-hover: #82bcf5;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--background-primary, #fff);
+  color: var(--text-normal, #222);
+  font-family: var(--font-text, var(--font-text-theme, "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif));
+  font-size: var(--font-text-size, 16px);
+  line-height: var(--line-height-normal, 1.6);
+  min-height: 100vh;
+}
+
+.app-container {
+  min-height: 100vh;
+}
+
+.markdown-reading-view {
+  padding: 24px clamp(20px, 6vw, 80px) 64px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.markdown-preview-view.markdown-rendered {
+  max-width: var(--file-line-width, 750px);
+  margin: 0 auto;
+}
+
+.markdown-preview-sizer > * + * {
+  margin-top: var(--p-spacing, 1rem);
+}
+
+/* Clamp embedded media to the column width.
+   Markdown can ship images with explicit pixel widths (e.g. `<img width="1600">`
+   from pasted HTML) or with intrinsic resolutions larger than the readable
+   column. Without this, the page scrolls horizontally and breaks the layout.
+   `height: auto` preserves aspect ratio when width is the binding dimension. */
+.markdown-rendered img,
+.markdown-rendered video,
+.markdown-rendered iframe,
+.markdown-rendered svg:not(.svg-icon),
+.markdown-rendered canvas,
+.markdown-rendered picture,
+.markdown-rendered pre.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ── Reading-width tiers ──────────────────────────────────────────
+   Standard keeps Obsidian's `--file-line-width` (≈700px, set per
+   theme). Wide gives more room for code-heavy / data-heavy docs.
+   Full fills the viewport minus the reading-view padding — useful
+   for tables and side-by-side diagrams. Both also clamp the sizer
+   so explicit max-width rules in theme.css don't fight us. */
+body.bsw-width-wide .markdown-preview-view.markdown-rendered,
+body.bsw-width-wide .markdown-preview-sizer.markdown-preview-section {
+  max-width: 1100px !important;
+}
+body.bsw-width-full .markdown-preview-view.markdown-rendered,
+body.bsw-width-full .markdown-preview-sizer.markdown-preview-section {
+  max-width: 100% !important;
+}
+body.bsw-width-full .markdown-reading-view {
+  padding-left: clamp(20px, 4vw, 48px);
+  padding-right: clamp(20px, 4vw, 48px);
+}
+
+/* 双栏对照 (bilingual): two .view-content siblings inside .workspace-leaf-content.
+   Each column scrolls independently — the page itself does not scroll —
+   so paragraph-index sync code in viewer.js can drive each side via
+   container.scrollTop. */
+body.bsw-bilingual-active { overflow: hidden; }
+body.bsw-bilingual-active .workspace-leaf-content {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  align-items: stretch;
+}
+body.bsw-bilingual-active .workspace-leaf-content > .view-content {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+body.bsw-bilingual-active .workspace-leaf-content > .view-content + .view-content {
+  border-left: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.08));
+}
+/* Inside each column, shrink the standard reading-view padding so two
+   columns don't waste half the viewport on margins. The sizer's
+   max-width still respects whatever non-bilingual width was active. */
+body.bsw-bilingual-active .markdown-reading-view {
+  padding-left: clamp(16px, 2vw, 32px);
+  padding-right: clamp(16px, 2vw, 32px);
+}
+body.bsw-bilingual-active .markdown-preview-view.markdown-rendered,
+body.bsw-bilingual-active .markdown-preview-sizer.markdown-preview-section {
+  max-width: 100% !important;
+}
+
+/* Suppress TOC chrome — fixed-position rail collides with the two-column
+   flex layout, and the progress bar overlaps the column boundary. */
+body.bsw-bilingual-active #baseline-toc,
+body.bsw-bilingual-active .bsw-toc-toggle,
+body.bsw-bilingual-active #baseline-progress-bar {
+  display: none !important;
+}
+/* …but the .bsw-with-toc / :not(.bsw-toc-collapsed) classes can still be
+   on the right-column .view-content (if the user opened the TOC before
+   switching to bilingual). Hiding only the panel itself isn't enough —
+   the content-wrap's `padding-right: 360px` would crush the right column.
+   Zero out that reservation, and snap the doc-tools row back to the
+   column edge so edit / copy stay reachable. */
+body.bsw-bilingual-active .view-content.bsw-with-toc > .bsw-content-wrap,
+body.bsw-bilingual-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) > .bsw-content-wrap {
+  padding-right: 0 !important;
+}
+body.bsw-bilingual-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-doc-tools {
+  right: 12px !important;
+}
+
+/* Wikilink / tag / embed styling fallback (Baseline mostly covers it,
+   but we want sensible defaults if a CSS variable is missing). */
+.internal-link {
+  color: var(--link-color, #2c84db);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+}
+.internal-link:hover { color: var(--link-color-hover, #2c84db); }
+
+.tag {
+  display: inline-block;
+  background: var(--tag-background, color-mix(in srgb, var(--color-accent, #2c84db) 12%, transparent));
+  color: var(--tag-color, var(--color-accent, #2c84db));
+  padding: 0 0.5em;
+  border-radius: var(--tag-radius, 999px);
+  font-size: 0.85em;
+  text-decoration: none;
+  margin: 0 0.1em;
+}
+
+.internal-embed {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--background-secondary, #f5f5f5);
+  border: 1px dashed var(--background-modifier-border, #ddd);
+  border-radius: 4px;
+  font-size: 0.92em;
+  color: var(--text-muted, #666);
+}
+
+mark {
+  background: var(--text-highlight-bg, rgba(255, 208, 0, 0.4));
+  color: var(--text-highlight-fg, inherit);
+  padding: 0 0.1em;
+  border-radius: 2px;
+}
+
+/* Fallback code block styling if hljs theme variables don't ship in Baseline.
+   `position: relative` anchors the hover-only copy chip injected by
+   src/renderer.js → injectCopyButtons. */
+pre {
+  position: relative;
+  background: var(--code-background, var(--background-secondary, #f5f5f5));
+  padding: 16px;
+  border-radius: var(--code-radius, 8px);
+  overflow-x: auto;
+}
+pre code.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+  font-family: var(--font-monospace, var(--font-monospace-theme, "JetBrains Mono", Menlo, Consolas, monospace));
+  font-size: 0.92em;
+}
+:not(pre) > code {
+  background: var(--code-background, rgba(0,0,0,0.06));
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  font-family: var(--font-monospace, var(--font-monospace-theme, "JetBrains Mono", Menlo, Consolas, monospace));
+  font-size: 0.92em;
+}
+
+/* Code-block copy chip — injected by src/renderer.js → injectCopyButtons.
+   Hidden by default (opacity 0) and revealed only when the user is hovering
+   the code block. Per user spec: "代码块右上角 copy 按钮只有在鼠标 hover
+   代码块的时候才显示" — at rest the code reads cleanly with no extra
+   chrome competing with the source. Keyboard users can still tab to the
+   chip; :focus-visible reveals it. */
+.bsw-code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-muted, #6e7681);
+  background: var(--background-primary, #ffffff);
+  border: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.10));
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0;
+  /* Don't intercept clicks while invisible — would block text-selection
+     near the corner. Re-enables together with opacity on pre:hover. */
+  pointer-events: none;
+  transition: opacity 0.15s ease, background 0.12s ease,
+              color 0.12s ease, border-color 0.12s ease;
+}
+pre:hover > .bsw-code-copy,
+.bsw-code-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.bsw-code-copy:hover {
+  color: var(--text-normal, #1f2328);
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+}
+body.theme-dark .bsw-code-copy {
+  background: var(--background-secondary, #2a2a2a);
+}
+body.theme-dark .bsw-code-copy:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-normal, #dcddde);
+}
+.bsw-code-copy.is-copied,
+.bsw-code-copy.is-copied:hover {
+  color: var(--interactive-accent, #2c84db);
+  border-color: var(--interactive-accent, #2c84db);
+  background: var(--background-primary, #ffffff);
+}
+body.theme-dark .bsw-code-copy.is-copied,
+body.theme-dark .bsw-code-copy.is-copied:hover {
+  background: var(--background-secondary, #2a2a2a);
+}
+
+/* ── List-item fold chevrons ──────────────────────────────────────
+   Injected by src/renderer.js → injectListFolds for every <li> with
+   a direct nested <ul>/<ol>.
+
+   Design choice: we draw OUR OWN bullet substitute (•) instead of
+   relying on the browser's ::marker. Otherwise the marker glyph and
+   our chevron live in different rendering pipelines (different fonts,
+   different metrics, different positions), and any hover-driven swap
+   between them flickers / shifts by a couple of pixels. By stacking
+   both glyphs inside a single absolutely-positioned button at the
+   same inset:0, the bullet→chevron transition becomes a pure opacity
+   crossfade — zero positional drift, smooth fade.
+
+   Three visual states:
+     1. expanded, idle     → •  (our dot, full opacity)
+     2. expanded, hovered  → ▾  (chevron crossfades in, dot fades out)
+     3. collapsed          → ▸  (chevron stays, rotated -90°)
+
+   Non-foldable sibling <li> still use the browser's bullet, so the
+   visual offset between our drawn dot and the native bullet may be
+   a hair off — but it's static (no animation), and aligned across
+   all foldable rows. */
+.markdown-rendered li.bsw-foldable {
+  position: relative;
+  /* Always: kill the native marker so our drawn glyphs own the slot. */
+  list-style: none;
+}
+.markdown-rendered .bsw-fold-toggle {
+  position: absolute;
+  /* Anchor the button center at roughly where the native disc bullet
+     would sit (≈ -0.7em from li content edge for the default ul
+     padding-inline-start: 40px). Width 1.1em → left:-1.35em centers
+     the glyph at -0.8em. Top is fine-tuned so the dot's optical
+     center lands on the first line's x-height. */
+  left: -1.35em;
+  top: 0;
+  width: 1.1em;
+  height: 1.6em;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  user-select: none;
+  /* Background fades in on hover for a soft hit-target chip; color
+     transitions live on the glyphs themselves. */
+  transition: background 0.12s ease;
+}
+.markdown-rendered .bsw-fold-toggle:hover {
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+}
+body.theme-dark .markdown-rendered .bsw-fold-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.markdown-rendered .bsw-fold-toggle:focus-visible {
+  outline: 2px solid var(--interactive-accent, #2c84db);
+  outline-offset: 1px;
+}
+
+/* The two glyphs occupy the EXACT same slot inside the button, so
+   crossfading them produces no positional drift. line-height:1 +
+   inline-flex center means the glyph's optical center stays put
+   regardless of the font's actual ascent/descent. */
+.markdown-rendered .bsw-fold-dot,
+.markdown-rendered .bsw-fold-chevron {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none; /* clicks pass through to the button */
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.18s ease;
+}
+.markdown-rendered .bsw-fold-dot {
+  /* Match Obsidian/Baseline's bullet vibe: muted text color, slightly
+     larger than the chevron so it has comparable visual weight to the
+     native disc bullet on neighbouring (non-foldable) rows. */
+  color: var(--text-muted, #6e7681);
+  font-size: 1.1em;
+  opacity: 1;
+}
+.markdown-rendered .bsw-fold-chevron {
+  color: var(--text-faint, #9aa0a6);
+  font-size: 0.85em;
+  opacity: 0;
+}
+/* State 2: hover → dot fades out, chevron fades in. */
+.markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-dot,
+.markdown-rendered .bsw-fold-toggle:focus-visible > .bsw-fold-dot {
+  opacity: 0;
+}
+.markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-chevron,
+.markdown-rendered .bsw-fold-toggle:focus-visible > .bsw-fold-chevron {
+  opacity: 1;
+}
+.markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-chevron {
+  color: var(--text-normal, #1f2328);
+}
+body.theme-dark .markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-chevron {
+  color: var(--text-normal, #dcddde);
+}
+/* State 3: collapsed → chevron stays (rotated -90°), dot hidden.
+   Hides the nested list via display:none — DOM stays intact so a
+   later expand just toggles the class back, no re-render needed. */
+.markdown-rendered li.bsw-foldable.is-collapsed > .bsw-fold-toggle > .bsw-fold-dot {
+  opacity: 0;
+}
+.markdown-rendered li.bsw-foldable.is-collapsed > .bsw-fold-toggle > .bsw-fold-chevron {
+  opacity: 1;
+  transform: rotate(-90deg);
+  color: var(--text-muted, #6e7681);
+}
+.markdown-rendered li.bsw-foldable.is-collapsed > ul,
+.markdown-rendered li.bsw-foldable.is-collapsed > ol {
+  display: none;
+}
+
+/* Mermaid container alignment */
+pre.mermaid {
+  background: transparent;
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* Tables */
+.markdown-rendered table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+}
+.markdown-rendered th, .markdown-rendered td {
+  border: 1px solid var(--background-modifier-border, #ddd);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.markdown-rendered th {
+  background: var(--background-secondary, #f5f5f5);
+  font-weight: var(--font-bold, 600);
+}
+
+/* Blockquote
+   Defer to theme.css for the visible styling. The Baseline theme draws
+   the quote stripe with a ::before pseudo-element anchored at
+   inset-inline-start: 16px and reserves left padding of
+   `32px + var(--blockquote-border-thickness)` so the text clears it.
+   Earlier we set our own `border-left: 3px solid` + `padding: 0 1em`
+   here, which (a) painted a SECOND stripe on top of the theme's bar and
+   (b) overrode the theme's left padding back down to ~16px, so the text
+   ran straight through the ::before bar. Only keep color + margin as a
+   safety net; everything else is the theme's job. */
+.markdown-rendered blockquote {
+  color: var(--blockquote-color, var(--text-muted, #666));
+  margin: 1em 0;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Floating theme switcher widget (src/theme-switcher.js)
+   ──────────────────────────────────────────────────────────────
+   STABILITY: this widget MUST look the same no matter which preset
+   is active. Earlier we read --menu-background / --text-normal /
+   --background-modifier-hover etc. from the cascade, but presets
+   redefine those variables on body, so the widget flickered through
+   colors every time the user switched. All colors below are now
+   hard-coded.
+
+   Two color sets are provided:
+     - #baseline-switcher.theme-light: bright pages
+     - #baseline-switcher.theme-dark : dim pages
+   The widget mirrors the page's resolved mode (set by content.js
+   on the widget root) rather than the preset's color palette. */
+
+#baseline-switcher {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  /* Default = light look until JS toggles the class. */
+  color: #1f2328;
+}
+
+/* Light palette */
+#baseline-switcher.theme-light {
+  --bsw-panel-bg: #ffffff;
+  --bsw-panel-border: rgba(0, 0, 0, 0.10);
+  /* Divider is intentionally lighter than --bsw-panel-border — section
+     separators inside the panel should be a hint, not a hard line. */
+  --bsw-divider: rgba(0, 0, 0, 0.05);
+  --bsw-text: #1f2328;
+  --bsw-text-muted: #6e7681;
+  --bsw-text-faint: #9aa0a6;
+  --bsw-accent: #2c84db;
+  --bsw-toggle-icon: #5a6268;
+  --bsw-toggle-icon-hover: #1f2328;
+  --bsw-hover-bg: rgba(0, 0, 0, 0.05);
+  --bsw-active-bg: rgba(44, 132, 219, 0.10);
+  --bsw-segment-bg: rgba(0, 0, 0, 0.05);
+  --bsw-segment-pill-bg: #ffffff;
+  --bsw-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.06),
+                      0 8px 16px rgba(0, 0, 0, 0.08),
+                      0 24px 48px rgba(0, 0, 0, 0.14);
+  --bsw-shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* Dark palette */
+#baseline-switcher.theme-dark {
+  --bsw-panel-bg: #1f2228;
+  --bsw-panel-border: rgba(255, 255, 255, 0.08);
+  --bsw-divider: rgba(255, 255, 255, 0.04);
+  --bsw-text: #e6edf3;
+  --bsw-text-muted: #9aa3ad;
+  --bsw-text-faint: #6e7681;
+  --bsw-accent: #5aa6f1;
+  --bsw-toggle-icon: #b1bac4;
+  --bsw-toggle-icon-hover: #e6edf3;
+  --bsw-hover-bg: rgba(255, 255, 255, 0.06);
+  --bsw-active-bg: rgba(90, 166, 241, 0.16);
+  --bsw-segment-bg: rgba(255, 255, 255, 0.06);
+  --bsw-segment-pill-bg: #2f343c;
+  --bsw-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.40),
+                      0 8px 16px rgba(0, 0, 0, 0.45),
+                      0 24px 48px rgba(0, 0, 0, 0.55);
+  --bsw-shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.35);
+  color: var(--bsw-text);
+}
+
+#baseline-switcher.theme-light { color: var(--bsw-text); }
+
+/* Bottom-right toggle cluster: [translate] | [palette]. Both buttons share
+   the same look — they're functional siblings, just with different icons. */
+#baseline-switcher .baseline-toggle-group {
+  display: flex;
+  align-items: center;
+}
+/* Subtle 20px-tall hairline between the two toggles. Matches the icon
+   height so visually it reads as "two buttons in one cluster", not two
+   floating chips. Hidden when only one toggle is mounted (viewer tab). */
+#baseline-switcher .baseline-toggle-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--bsw-divider);
+  margin: 0 6px;
+  flex: none;
+}
+
+/* Toggle: bare icon — the cluster divider already groups the pair, so we
+   skip per-button background/border. Hover paints a soft chip for affordance. */
+#baseline-switcher-toggle,
+#baseline-translate-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--bsw-toggle-icon);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+#baseline-switcher-toggle:hover,
+#baseline-translate-toggle:hover {
+  color: var(--bsw-toggle-icon-hover);
+  background: var(--bsw-hover-bg);
+  transform: translateY(-1px);
+}
+#baseline-switcher-toggle:active,
+#baseline-translate-toggle:active { transform: translateY(0); }
+#baseline-switcher-toggle:focus-visible,
+#baseline-translate-toggle:focus-visible {
+  outline: 2px solid var(--bsw-accent);
+  outline-offset: 2px;
+}
+
+/* Panels: rounded corners, subtle elevation, tight padding. Both panels
+   anchor right: 0 (mutually exclusive, so they share the same airspace). */
+#baseline-switcher-panel,
+#baseline-translate-panel {
+  position: absolute;
+  right: 0;
+  bottom: 48px;
+  width: 304px;
+  max-height: 72vh;
+  overflow-y: auto;
+  background: var(--bsw-panel-bg);
+  border: 1px solid var(--bsw-panel-border);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--bsw-shadow-panel);
+  box-sizing: border-box;
+  color: var(--bsw-text);
+}
+#baseline-switcher-panel[hidden],
+#baseline-translate-panel[hidden] { display: none; }
+
+/* Restore UA's [hidden] behavior for inner blocks that have an explicit
+   display rule. Without this, e.g. `.bsw-import { display: flex }` beats
+   the user-agent `[hidden] { display: none }`, and the import view shows
+   on top of the main panel content as soon as the panel opens. */
+#baseline-switcher .bsw-main[hidden],
+#baseline-switcher .bsw-import[hidden],
+#baseline-switcher .bsw-settings[hidden] { display: none; }
+
+/* When the import OR settings view is showing, widen the panel so neither
+   the JSON textarea nor the API-key/base-URL inputs feel claustrophobic.
+   The Chrome MV3 baseline (Chrome ≥ 105) supports :has(), so we don't need
+   a JS class toggle. */
+#baseline-switcher-panel:has(.bsw-import:not([hidden])),
+#baseline-switcher-panel:has(.bsw-settings:not([hidden])) {
+  width: 360px;
+}
+
+/* All inner selectors are anchored on #baseline-switcher to lift specificity
+   to (1,1,0)=110, so preset rules like `body.input-X button { padding: ... }`
+   (specificity 11) cannot override widget styling. */
+
+#baseline-switcher .bsw-section + .bsw-section {
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--bsw-divider);
+}
+
+#baseline-switcher .bsw-section-label {
+  padding: 4px 14px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bsw-text-faint);
+  user-select: none;
+}
+
+#baseline-switcher .bsw-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 10px;
+}
+
+/* "Marketplace ↗" link next to the Custom section label. */
+#baseline-switcher .bsw-marketplace-link {
+  font-size: 12px;
+  color: var(--bsw-text-muted);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+#baseline-switcher .bsw-marketplace-link:hover {
+  color: var(--bsw-accent);
+  background: var(--bsw-hover-bg);
+}
+
+/* Mode row: segmented control. */
+#baseline-switcher .bsw-modes {
+  display: flex;
+  gap: 0;
+  padding: 4px;
+  background: var(--bsw-segment-bg);
+  border-radius: 10px;
+  margin: 0 6px;
+}
+#baseline-switcher .bsw-mode-item {
+  flex: 1;
+  /* Explicit inline-flex centering so presets that reset `button` to
+     text-align:left (Adwaita / minimal both do) can't push the label
+     to the edge. align/justify guarantees both axes. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  color: var(--bsw-text-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.25;
+  cursor: pointer;
+  border-radius: 7px;
+  transition: background 0.12s ease, color 0.12s ease;
+  box-shadow: none;
+  opacity: 1;
+}
+#baseline-switcher .bsw-mode-item:hover:not(.is-active) {
+  color: var(--bsw-text);
+}
+#baseline-switcher .bsw-mode-item.is-active {
+  background: var(--bsw-segment-pill-bg);
+  color: var(--bsw-text);
+  font-weight: 600;
+  box-shadow: var(--bsw-shadow-pill);
+}
+#baseline-switcher .bsw-mode-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Preset list. */
+#baseline-switcher .bsw-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 2px;
+}
+#baseline-switcher .bsw-preset-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  color: var(--bsw-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.12s ease, color 0.12s ease;
+  box-shadow: none;
+  opacity: 1;
+}
+#baseline-switcher .bsw-preset-item:hover {
+  background: var(--bsw-hover-bg);
+}
+#baseline-switcher .bsw-preset-item.is-active {
+  background: var(--bsw-active-bg);
+  color: var(--bsw-accent);
+  font-weight: 600;
+}
+#baseline-switcher .bsw-preset-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+#baseline-switcher .bsw-preset-item:disabled:hover {
+  background: transparent;
+}
+
+#baseline-switcher .bsw-preset-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--bsw-accent);
+  opacity: 0;
+  flex-shrink: 0;
+}
+#baseline-switcher .bsw-preset-item.is-active .bsw-preset-check { opacity: 1; }
+
+#baseline-switcher .bsw-preset-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Delete icon on custom preset rows — hidden until the row is hovered
+   or focused so the list still reads as a clean preset picker. */
+#baseline-switcher .bsw-preset-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--bsw-text-faint);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+#baseline-switcher .bsw-preset-item:hover .bsw-preset-delete,
+#baseline-switcher .bsw-preset-item:focus-within .bsw-preset-delete {
+  opacity: 1;
+}
+#baseline-switcher .bsw-preset-delete:hover {
+  color: var(--bsw-text);
+  background: var(--bsw-hover-bg);
+}
+
+/* Empty state for custom presets list. */
+#baseline-switcher .bsw-empty {
+  padding: 14px 14px;
+  font-size: 13px;
+  color: var(--bsw-text-faint);
+  text-align: center;
+  font-style: italic;
+}
+
+/* "+ Import preset" button under the custom list. */
+#baseline-switcher .bsw-import-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: calc(100% - 4px);
+  margin: 10px 2px 2px;
+  padding: 11px 14px;
+  border: 1px dashed var(--bsw-panel-border);
+  background: transparent;
+  color: var(--bsw-text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  box-shadow: none;
+  opacity: 1;
+}
+#baseline-switcher .bsw-import-button:hover:not(:disabled) {
+  color: var(--bsw-accent);
+  border-color: var(--bsw-accent);
+  background: var(--bsw-hover-bg);
+}
+#baseline-switcher .bsw-import-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Import view (takes over the panel content area) ─────────────── */
+/* Density matches the main panel: section-label uses the same font-size
+   and letter-spacing as Color mode / Preset labels; inputs match the
+   preset-item line-height. Keeps both views visually one product. */
+
+#baseline-switcher .bsw-import {
+  padding: 4px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--bsw-text);
+}
+
+#baseline-switcher .bsw-import-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px;
+}
+#baseline-switcher .bsw-import-back {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--bsw-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+#baseline-switcher .bsw-import-back:hover {
+  background: var(--bsw-hover-bg);
+  color: var(--bsw-text);
+}
+#baseline-switcher .bsw-import-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bsw-text);
+}
+
+#baseline-switcher .bsw-import-hint {
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--bsw-text-muted);
+  line-height: 1.55;
+}
+#baseline-switcher .bsw-import-hint a {
+  color: var(--bsw-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+#baseline-switcher .bsw-import-hint a:hover {
+  text-decoration: underline;
+}
+
+#baseline-switcher .bsw-import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px;
+}
+#baseline-switcher .bsw-import-field > span {
+  /* Match .bsw-section-label so field labels in both views read identically. */
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bsw-text-faint);
+}
+/* Label row that also carries a right-aligned helper link (e.g. "Get key ↗"
+   next to API Key for Google AI Studio). Mirrors .bsw-marketplace-link. */
+#baseline-switcher .bsw-import-field > span.bsw-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#baseline-switcher .bsw-field-link {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--bsw-text-muted);
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+#baseline-switcher .bsw-field-link:hover {
+  color: var(--bsw-accent);
+  background: var(--bsw-hover-bg);
+}
+
+#baseline-switcher .bsw-import-name,
+#baseline-switcher .bsw-import-json {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--bsw-text);
+  background: var(--bsw-segment-bg);
+  border: 1px solid var(--bsw-panel-border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+#baseline-switcher .bsw-import-name:focus,
+#baseline-switcher .bsw-import-json:focus {
+  border-color: var(--bsw-accent);
+  background: var(--bsw-panel-bg);
+}
+#baseline-switcher .bsw-import-json {
+  min-height: 160px;
+  max-height: 260px;
+  resize: vertical;
+  font-family: var(--font-monospace, "JetBrains Mono", Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+}
+#baseline-switcher .bsw-import-name:disabled,
+#baseline-switcher .bsw-import-json:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+/* Placeholders read as hints, not pre-filled values — browser defaults
+   render them dark enough that users try (and fail) to select them. */
+#baseline-switcher .bsw-import-name::placeholder,
+#baseline-switcher .bsw-import-json::placeholder {
+  color: var(--bsw-text-faint);
+  opacity: 0.55;
+}
+
+/* Custom combobox (input + chevron + popover listbox).
+   Used by the Google AI Studio model picker. The native <datalist>
+   filters its options against the input value, which made preset
+   models disappear as soon as one was typed — this widget always
+   shows the full preset list. */
+#baseline-switcher .bsw-combo {
+  position: relative;
+  width: 100%;
+}
+#baseline-switcher .bsw-combo .bsw-combo-input {
+  padding-right: 34px;
+}
+#baseline-switcher .bsw-combo-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--bsw-text-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.12s ease, background 0.12s ease, transform 0.18s ease;
+}
+#baseline-switcher .bsw-combo-toggle:hover {
+  color: var(--bsw-text);
+  background: var(--bsw-segment-bg);
+}
+#baseline-switcher .bsw-combo.is-open .bsw-combo-toggle {
+  color: var(--bsw-accent);
+  transform: translateY(-50%) rotate(180deg);
+}
+
+#baseline-switcher .bsw-combo-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--bsw-panel-bg);
+  border: 1px solid var(--bsw-panel-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+#baseline-switcher.theme-dark .bsw-combo-panel {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+#baseline-switcher .bsw-combo-panel[hidden] { display: none; }
+
+#baseline-switcher .bsw-combo-option {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--bsw-text);
+  cursor: pointer;
+  transition: background 0.10s ease, color 0.10s ease;
+}
+#baseline-switcher .bsw-combo-option:hover,
+#baseline-switcher .bsw-combo-option:focus-visible {
+  background: var(--bsw-segment-bg);
+  outline: none;
+}
+#baseline-switcher .bsw-combo-option.is-custom {
+  color: var(--bsw-text-faint);
+  border-top: 1px solid var(--bsw-panel-border);
+  margin-top: 2px;
+  padding-top: 8px;
+  border-radius: 0 0 6px 6px;
+}
+#baseline-switcher .bsw-combo-option.is-custom:hover,
+#baseline-switcher .bsw-combo-option.is-custom:focus-visible {
+  color: var(--bsw-accent);
+}
+
+#baseline-switcher .bsw-import-error {
+  margin: 0 10px;
+  padding: 9px 12px;
+  background: rgba(220, 60, 60, 0.10);
+  border: 1px solid rgba(220, 60, 60, 0.30);
+  color: #c2453a;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#baseline-switcher.theme-dark .bsw-import-error {
+  background: rgba(240, 100, 100, 0.12);
+  border-color: rgba(240, 100, 100, 0.32);
+  color: #f48a82;
+}
+
+#baseline-switcher .bsw-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 8px;
+}
+
+#baseline-switcher .bsw-btn {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.25;
+  padding: 9px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+#baseline-switcher .bsw-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+#baseline-switcher .bsw-btn-ghost {
+  background: transparent;
+  color: var(--bsw-text-muted);
+  border-color: var(--bsw-panel-border);
+}
+#baseline-switcher .bsw-btn-ghost:hover:not(:disabled) {
+  color: var(--bsw-text);
+  background: var(--bsw-hover-bg);
+}
+#baseline-switcher .bsw-btn-primary {
+  background: var(--bsw-accent);
+  color: #ffffff;
+  border-color: var(--bsw-accent);
+  font-weight: 600;
+}
+#baseline-switcher .bsw-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Translate section (main panel) + AI Settings sub-view
+   ──────────────────────────────────────────────────────────────
+   Translate section sits at the bottom of the main panel and the
+   AI Settings sub-view reuses the import view's class set (header
+   / field / actions / btn) — only the field layout differs. */
+
+/* "AI Settings ⚙" link button in the Translate section header. */
+#baseline-switcher .bsw-settings-link {
+  font: inherit;
+  font-size: 12px;
+  color: var(--bsw-text-muted);
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+#baseline-switcher .bsw-settings-link:hover:not(:disabled) {
+  color: var(--bsw-text);
+  background: var(--bsw-hover-bg);
+}
+#baseline-switcher .bsw-settings-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Target-language picker — labelled <select> stacked above the button. */
+#baseline-switcher .bsw-translate-lang {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 14px 10px;
+}
+#baseline-switcher .bsw-translate-lang > span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--bsw-text-faint);
+}
+
+#baseline-switcher .bsw-translate-select {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: var(--bsw-panel-bg);
+  color: var(--bsw-text);
+  border: 1px solid var(--bsw-panel-border);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+#baseline-switcher .bsw-translate-select:focus {
+  border-color: var(--bsw-accent);
+}
+#baseline-switcher .bsw-translate-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Primary action button — full-width so it's easy to click. The button
+   carries the spinner SVG inline (left) + label (right) when busy, so we
+   align children with a small gap. */
+#baseline-switcher .bsw-translate-btn {
+  width: calc(100% - 28px);
+  margin: 0 14px;
+  gap: 7px;
+}
+
+/* Tiny status line under the button — "正在翻译当前文档…", error message, etc.
+   During busy the status text is prefixed with a spinner, so we use an
+   inline-flex so the icon sits flush with the first line of text. */
+#baseline-switcher .bsw-translate-status {
+  font-size: 12px;
+  color: var(--bsw-text-muted);
+  padding: 8px 14px 4px;
+  line-height: 1.35;
+  word-break: break-word;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#baseline-switcher .bsw-translate-status.is-error {
+  color: #c0392b;
+}
+#baseline-switcher.theme-dark .bsw-translate-status.is-error {
+  color: #ff8a80;
+}
+
+/* Spinner — shared by the translate button label and the status line.
+   Mirrors Obsidian's ai-translator-ribbon-loading animation: a 1s linear
+   rotation on the SVG itself, no opacity dance, so the spin reads as
+   "I'm working" without competing with the surrounding text colour. */
+@keyframes bsw-translate-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+#baseline-switcher .bsw-translate-spinner {
+  flex-shrink: 0;
+  animation: bsw-translate-spin 1s linear infinite;
+  /* The arc looks too thick at 14px next to the small status text — knock
+     the opacity back a touch so it reads as a hint, not a sibling glyph. */
+  opacity: 0.85;
+}
+/* When the spinner sits inside the primary button (white-on-accent), drop
+   the opacity nudge so it stays crisp against the accent fill. */
+#baseline-switcher .bsw-translate-btn .bsw-translate-spinner {
+  opacity: 1;
+}
+
+/* The provider segmented control inside the settings view reuses
+   .bsw-modes; this rule just pulls the group flush against the
+   field's label spacing. */
+#baseline-switcher .bsw-settings-segments {
+  margin: 0;
+}
+
+/* Provider-specific fields container — tears down + re-renders on
+   provider switch (mirrors Obsidian's PluginSettingTab.display() rebuild
+   pattern). Just a vertical stack with consistent gaps. */
+#baseline-switcher .bsw-settings-provider-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Per-field hint text below the input — explains what the field expects
+   without crowding the uppercase label. Mirrors Obsidian's setDesc(). */
+#baseline-switcher .bsw-field-desc {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--bsw-text-faint);
+  /* Slight indent so the description visually nests under the input
+     rather than floating to the left edge of the field. */
+  padding: 0 2px;
+  /* Prevent the last line from stranding a single Chinese character —
+     pretty's last-line balancer pulls characters down to avoid orphans. */
+  text-wrap: pretty;
+  /* Avoid breaking inside Latin tokens (URLs, model names) which can
+     create awkward single-char last lines when the break point is the
+     end of a long token. word-break: keep-all also discourages CJK
+     mid-word breaks at commas. */
+  overflow-wrap: normal;
+}
+
+/* Scrollbar inside the panel */
+#baseline-switcher-panel::-webkit-scrollbar { width: 6px; }
+#baseline-switcher-panel::-webkit-scrollbar-thumb {
+  background: var(--bsw-panel-border);
+  border-radius: 3px;
+}
+#baseline-switcher-panel::-webkit-scrollbar-track { background: transparent; }
+
+/* ──────────────────────────────────────────────────────────────
+   Heading anchors (src/toc.js → mountHeadingAnchors)
+   ──────────────────────────────────────────────────────────────
+   A small `#` link injected at the end of each heading. Hidden
+   until the heading is hovered or the anchor itself is focused
+   (keyboard nav still gets to it). Click copies a permalink with
+   the heading id as the hash. Same color hard-coding policy as
+   the switcher: we don't want presets to repaint this element. */
+
+.markdown-rendered h1,
+.markdown-rendered h2,
+.markdown-rendered h3,
+.markdown-rendered h4,
+.markdown-rendered h5,
+.markdown-rendered h6 {
+  /* Scroll-margin so anchor jumps don't tuck the heading under
+     the progress bar / browser chrome. */
+  scroll-margin-top: 24px;
+}
+
+.markdown-rendered .bsw-heading-anchor {
+  display: inline-block;
+  margin-left: 0.4em;
+  padding: 0 0.25em;
+  color: var(--text-faint, #9aa0a6);
+  text-decoration: none;
+  font-weight: 400;
+  font-size: 0.7em;
+  vertical-align: middle;
+  opacity: 0;
+  border-radius: 4px;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.markdown-rendered h1:hover .bsw-heading-anchor,
+.markdown-rendered h2:hover .bsw-heading-anchor,
+.markdown-rendered h3:hover .bsw-heading-anchor,
+.markdown-rendered h4:hover .bsw-heading-anchor,
+.markdown-rendered h5:hover .bsw-heading-anchor,
+.markdown-rendered h6:hover .bsw-heading-anchor,
+.markdown-rendered .bsw-heading-anchor:focus-visible {
+  opacity: 1;
+}
+.markdown-rendered .bsw-heading-anchor:hover {
+  color: var(--link-color, #2c84db);
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+}
+.markdown-rendered .bsw-heading-anchor:focus-visible {
+  outline: 2px solid var(--link-color, #2c84db);
+  outline-offset: 1px;
+}
+
+/* Shared "Link copied" pill. Positioned by JS (fixed top/left = anchor
+   center top); CSS centers it horizontally and lifts above the anchor. */
+#baseline-toast {
+  position: fixed;
+  z-index: 2147483646;
+  transform: translate(-50%, -100%);
+  background: #1f2228;
+  color: #e6edf3;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font: 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.20);
+}
+#baseline-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 4px));
+}
+/* Anchored too close to the viewport top to fit above → flip below. */
+#baseline-toast.is-below {
+  transform: translate(-50%, 0);
+}
+#baseline-toast.is-below.is-visible {
+  transform: translate(-50%, 4px);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   TOC sidebar (src/toc.js → mountTOC)
+   ──────────────────────────────────────────────────────────────
+   The TOC is position: fixed on the right edge of the viewport so
+   it scrolls independently of the article and avoids the height-
+   cascade conflicts that flex + sticky hit inside the Obsidian
+   wrapper chain. The article reserves a padding-right slot when
+   the TOC is open; combined with a transform on the panel, that
+   produces "content shifts left, TOC slides in from the right"
+   without disturbing document flow.
+
+   The panel inherits the page background (no border, no panel
+   color) so it reads as one surface with the article. */
+
+.view-content.bsw-with-toc {
+  position: relative;
+}
+
+.view-content.bsw-with-toc > .bsw-content-wrap {
+  position: relative;
+  padding-right: 0;
+  transition: padding-right 0.22s ease;
+}
+.view-content.bsw-with-toc:not(.bsw-toc-collapsed) > .bsw-content-wrap {
+  padding-right: 360px;
+}
+
+#baseline-toc {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 360px;
+  height: 100vh;
+  z-index: 4;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted, #6e7681);
+  font-family: var(--font-interface, var(--font-text, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif));
+  -webkit-font-smoothing: antialiased;
+  /* Off-screen when collapsed; transform animates the slide-in. */
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  pointer-events: none;
+}
+.view-content.bsw-with-toc:not(.bsw-toc-collapsed) #baseline-toc {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* Doc-tools row — fixed top-right strip holding edit / copy / TOC-toggle.
+   The `right` offset animates in lockstep with the TOC slide-in so the
+   group travels to sit at the panel's left edge when the TOC opens. */
+.bsw-content-wrap > .bsw-doc-tools {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transition: right 0.22s ease;
+}
+.view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-doc-tools {
+  right: 372px;
+}
+
+/* Individual tool button — naked icon, no chrome by default. Hover paints
+   a subtle pill so the click target is discoverable without competing
+   with content. */
+.bsw-doc-tool {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #6e7681);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+.bsw-doc-tool:hover {
+  color: var(--text-normal, #1f2328);
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+}
+body.theme-dark .bsw-doc-tool:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.bsw-doc-tool:focus-visible {
+  outline: 2px solid var(--interactive-accent, #2c84db);
+  outline-offset: 2px;
+}
+
+/* Tooltip — pure CSS pill anchored below the button. Centered horizontally
+   on the icon; appears on hover/focus with a small slide. */
+.bsw-doc-tool[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translate(-50%, -4px);
+  background: #1f2228;
+  color: #e6edf3;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font: 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  /* Hide immediately when hover ends (no delay); the show side adds its
+     own delay in the :hover/:focus-visible rule. */
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition-delay: 0s;
+  z-index: 1;
+}
+.bsw-doc-tool[data-tooltip]:hover::after,
+.bsw-doc-tool[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  /* 1s dwell before the tooltip appears — keeps the chrome quiet during
+     pass-through, but still discoverable on intentional hover. */
+  transition-delay: 1s;
+}
+
+/* Inherits the page background — no border, no panel fill — so the TOC
+   reads as one surface with the article. */
+#baseline-toc .bsw-toc-panel {
+  width: 360px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 16px 12px 16px 24px;
+}
+
+#baseline-toc .bsw-toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 10px 4px;
+  flex-shrink: 0;
+}
+#baseline-toc .bsw-toc-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint, var(--text-muted, #6e7681));
+  user-select: none;
+}
+
+#baseline-toc .bsw-toc-list {
+  display: flex;
+  flex-direction: column;
+  /* Small per-item gap so the row backgrounds don't blur into each other
+     on hover; combined with the bumped padding this gives the list a
+     "soft" feel rather than the tight legacy stack. */
+  gap: 2px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+/* Base item — all level-agnostic rules (padding, wrap, transitions).
+   Level-specific font-size / weight / color are set in the level rules
+   below so the visual hierarchy reads at a glance: bigger + bolder +
+   darker = closer to the page's outline root. */
+#baseline-toc .bsw-toc-item {
+  display: block;
+  /* Bug fix: line-height 1.4 + padding 6px was clipping CJK descenders
+     because the box was barely tall enough to contain the rendered glyph
+     box. Bumping both gives the text breathing room. */
+  padding: 6px 10px;
+  line-height: 1.5;
+  text-decoration: none;
+  border-radius: 6px;
+  /* Wrap long headings instead of ellipsifying — at 360px we have
+     enough horizontal room for two lines, and CJK headings frequently
+     exceed the single-line cap. word-break keeps unbroken Latin tokens
+     from blowing out the panel width. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+/* Level gradient. The pattern is: each step down drops 0.5–1px of size,
+   one weight tier, and one color tier — so the eye can rank items
+   without reading them. Fallbacks deliberately set explicit hex
+   instead of trusting --text-muted / --text-faint, which some themes
+   leave too light to read against a white panel. */
+#baseline-toc .bsw-toc-item[data-level="1"] {
+  padding-left: 10px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-normal, #16191d);
+  letter-spacing: -0.005em;
+}
+#baseline-toc .bsw-toc-item[data-level="2"] {
+  padding-left: 22px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-normal, #2f343a);
+}
+#baseline-toc .bsw-toc-item[data-level="3"] {
+  padding-left: 36px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-muted, #5a6168);
+}
+#baseline-toc .bsw-toc-item[data-level="4"] {
+  padding-left: 50px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-faint, #7a818a);
+}
+
+/* Hover lifts the item to the darkest color tier regardless of level,
+   so deeply-nested items become legible the moment the cursor reaches
+   them. */
+#baseline-toc .bsw-toc-item:hover {
+  background: var(--background-modifier-hover, rgba(127, 127, 127, 0.08));
+  color: var(--text-normal, #16191d);
+}
+
+/* Dark theme — the same gradient, but mapped to lighter shades so each
+   tier still has visible contrast against the dark panel background. */
+body.theme-dark #baseline-toc .bsw-toc-item[data-level="1"] {
+  color: var(--text-normal, #f0f4f8);
+}
+body.theme-dark #baseline-toc .bsw-toc-item[data-level="2"] {
+  color: var(--text-normal, #d6dce3);
+}
+body.theme-dark #baseline-toc .bsw-toc-item[data-level="3"] {
+  color: var(--text-muted, #a6adb5);
+}
+body.theme-dark #baseline-toc .bsw-toc-item[data-level="4"] {
+  color: var(--text-faint, #828990);
+}
+body.theme-dark #baseline-toc .bsw-toc-item:hover {
+  color: var(--text-normal, #f0f4f8);
+}
+
+#baseline-toc .bsw-toc-item.is-active {
+  /* User spec: 选中只显示文字颜色变化，不要左边竖线 / 行背景填充。
+     Active is now purely user-click-driven (no scroll-spy), so the
+     state is "where you last jumped to" — accent color + bold is
+     plenty without further chrome. */
+  background: transparent;
+  color: var(--interactive-accent, #2c84db);
+  font-weight: 600;
+}
+
+#baseline-toc .bsw-toc-list::-webkit-scrollbar { width: 6px; }
+#baseline-toc .bsw-toc-list::-webkit-scrollbar-thumb {
+  background: var(--background-modifier-border, rgba(127, 127, 127, 0.20));
+  border-radius: 3px;
+}
+#baseline-toc .bsw-toc-list::-webkit-scrollbar-track { background: transparent; }
+
+/* Mid-width safety net (900–1100px): even if the TOC happens to be open
+   when the user drags the window into this band, don't reserve a 360px
+   gutter — there isn't enough room for both a readable column AND the
+   panel, and the gutter would crush the article down to ~470px. Instead,
+   the panel becomes an overlay drawer on top of the article (opaque
+   background + soft shadow so the body text doesn't bleed through). The
+   sibling resize handler in toc.js will also auto-collapse the panel on
+   entry to this band; this rule is just belt-and-braces. */
+@media (max-width: 1100px) {
+  .view-content.bsw-with-toc:not(.bsw-toc-collapsed) > .bsw-content-wrap {
+    padding-right: 0;
+  }
+  .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-doc-tools {
+    right: 12px;
+  }
+  #baseline-toc {
+    background: var(--background-primary, #ffffff);
+    border-left: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.08));
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+  }
+  body.theme-dark #baseline-toc {
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* Hide TOC + its toggle on phone-narrow viewports — even an overlay drawer
+   would smother the column there. Edit + copy stay visible (they're not
+   tied to the TOC). */
+@media (max-width: 900px) {
+  #baseline-toc,
+  .bsw-doc-tools > .bsw-toc-toggle { display: none; }
+  .view-content.bsw-with-toc { display: block; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Reading-progress bar (src/toc.js → mountProgressBar)
+   ────────────────────────────────────────────────────────────── */
+#baseline-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 0%;
+  background: #2c84db;
+  z-index: 2147483647;
+  transition: width 0.1s linear;
+  pointer-events: none;
+}
+body.theme-dark #baseline-progress { background: #5aa6f1; }
+
+/* ──────────────────────────────────────────────────────────────
+   Viewer status pill
+   ──────────────────────────────────────────────────────────────
+   Floating pill at top-center of the viewer tab. Three states:
+     - busy   (default): spinner + "正在翻译…(已生成 N 字符)" + 取消
+     - error  (red):     icon + message + 关闭
+     - hidden:           display:none after `done` (or after close)
+   Centered horizontally so it sits clear of the TOC toggle
+   (top-right) and the switcher (bottom-right) regardless of TOC
+   open/closed state. */
+
+#bsw-viewer-status {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  background: var(--background-primary, #ffffff);
+  color: var(--text-normal, #1f2328);
+  border: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.10));
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06),
+              0 8px 24px rgba(0, 0, 0, 0.10);
+  font-family: var(--font-text, system-ui, sans-serif);
+  font-size: 13px;
+  line-height: 1.2;
+  max-width: min(560px, calc(100vw - 32px));
+}
+
+body.theme-dark #bsw-viewer-status {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.40),
+              0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+#bsw-viewer-status[hidden] { display: none; }
+
+#bsw-viewer-status.is-error {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.40);
+}
+body.theme-dark #bsw-viewer-status.is-error {
+  color: #ff8a7a;
+  border-color: rgba(255, 138, 122, 0.40);
+}
+
+#bsw-viewer-status .bsw-viewer-status-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--text-muted, #6e7681);
+}
+#bsw-viewer-status.is-error .bsw-viewer-status-icon {
+  color: currentColor;
+}
+
+#bsw-viewer-status .bsw-viewer-status-icon.is-spin svg {
+  animation: bsw-spin 0.9s linear infinite;
+}
+
+@keyframes bsw-spin {
+  to { transform: rotate(360deg); }
+}
+
+#bsw-viewer-status .bsw-viewer-status-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#bsw-viewer-status .bsw-viewer-status-action {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #6e7681);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+#bsw-viewer-status .bsw-viewer-status-action:hover {
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-normal, #1f2328);
+}
+body.theme-dark #bsw-viewer-status .bsw-viewer-status-action:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6edf3;
+}
+#bsw-viewer-status.is-error .bsw-viewer-status-action {
+  color: currentColor;
+}
+#bsw-viewer-status.is-error .bsw-viewer-status-action:hover {
+  background: rgba(192, 57, 43, 0.10);
+  color: currentColor;
+}
+body.theme-dark #bsw-viewer-status.is-error .bsw-viewer-status-action:hover {
+  background: rgba(255, 138, 122, 0.12);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   First-run hint card
+   ──────────────────────────────────────────────────────────────
+   Bottom-left dismissible card shown on the first .md viewer open
+   (file:// only). Sits clear of the switcher (bottom-right) and
+   the TOC toggle (top-right). Auto-removed after click; flag is
+   persisted to chrome.storage.sync so it never reappears. */
+
+#bsw-md-hint {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 360px;
+  padding: 14px 14px 14px 16px;
+  background: var(--background-primary, #ffffff);
+  color: var(--text-normal, #1f2328);
+  border: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.10));
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06),
+              0 12px 32px rgba(0, 0, 0, 0.12);
+  font-family: var(--font-text, system-ui, sans-serif);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+body.theme-dark #bsw-md-hint {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.40),
+              0 12px 32px rgba(0, 0, 0, 0.50);
+}
+
+#bsw-md-hint.is-leaving {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+#bsw-md-hint .bsw-md-hint-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#bsw-md-hint .bsw-md-hint-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+
+#bsw-md-hint .bsw-md-hint-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted, #6e7681);
+}
+
+#bsw-md-hint .bsw-md-hint-close {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: -4px -6px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #6e7681);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  border-radius: 6px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+#bsw-md-hint .bsw-md-hint-close:hover {
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-normal, #1f2328);
+}
+body.theme-dark #bsw-md-hint .bsw-md-hint-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6edf3;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Print styles
+   ──────────────────────────────────────────────────────────────
+   Strip extension chrome (switcher, TOC, progress bar, heading
+   anchors), force a light palette for predictable ink, and let
+   the reading column use the full page width. */
+
+@media print {
+  #baseline-switcher,
+  #baseline-toc,
+  #baseline-progress,
+  #baseline-toast,
+  #bsw-viewer-status,
+  #bsw-md-hint,
+  .bsw-doc-tools,
+  .bsw-heading-anchor,
+  .bsw-code-copy,
+  .bsw-fold-toggle {
+    display: none !important;
+  }
+  /* Print expanded — never carry hidden content into paper. */
+  .markdown-rendered li.bsw-foldable.is-collapsed > ul,
+  .markdown-rendered li.bsw-foldable.is-collapsed > ol {
+    display: block !important;
+  }
+  .view-content.bsw-with-toc { display: block !important; }
+
+  html, body {
+    background: #ffffff !important;
+    color: #1f2328 !important;
+  }
+
+  .markdown-reading-view {
+    padding: 0 !important;
+  }
+  .markdown-preview-view.markdown-rendered,
+  .markdown-preview-sizer.markdown-preview-section {
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  /* Keep code blocks and tables intact across page breaks where possible. */
+  pre, blockquote, table, figure {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  /* Show link targets so printed pages keep their hyperlink context. */
+  a[href^="http"]::after,
+  a[href^="https"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #555;
+    word-break: break-all;
+  }
+  /* But not for anchor/in-page links — those are noise on paper. */
+  a[href^="#"]::after { content: ""; }
+}
