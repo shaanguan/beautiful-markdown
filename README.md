@@ -30,7 +30,7 @@ including the full marketplace of community presets.
 1. Open `chrome://extensions/`
 2. Toggle **Developer mode** (top right)
 3. Click **Load unpacked**
-4. Select this folder: `~/Documents/projects/chrome-baseline-md`
+4. Select this folder: `~/Documents/projects/beautiful-markdown`
 5. Open the extension's **Details** page
    → enable **Allow access to file URLs** (required for `file://` rendering)
 
@@ -49,7 +49,7 @@ including the full marketplace of community presets.
 ## Architecture
 
 ```
-chrome-baseline-md/
+beautiful-markdown/
 ├── manifest.json           MV3 manifest
 ├── src/
 │   ├── content.js          Entry: detects markdown, builds Obsidian DOM

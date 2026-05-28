@@ -14,7 +14,7 @@
         "https://*/*"
     ],
     "action": {
-        "default_title": "Markdown Viewer",
+        "default_title": "Beautiful Markdown",
         "default_icon": {
             "16": "icons/icon16.png",
             "48": "icons/icon48.png",
