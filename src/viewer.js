@@ -496,7 +496,20 @@
       if (!leftMountEl || leftRendered) return;
       if (!originalMarkdown) return; // wait for the "original" message
       window.BaselineRenderer.renderTo(originalMarkdown, leftMountEl)
-        .then(() => { leftRendered = true; })
+        .then(() => {
+          leftRendered = true;
+          // Mirror the translation column's edit/copy chrome on the
+          // original side so 双栏对照 reads as two equal panes (TOC and
+          // swap are intentionally omitted — bilingual has nothing to
+          // swap to, and TOC is suppressed by .bsw-twopane-active).
+          if (window.BaselineTOC && window.BaselineTOC.mountDocActions) {
+            window.BaselineTOC.mountDocActions(leftMountEl, {
+              onCopy: () => originalMarkdown,
+              copyTooltip: "复制原文",
+              copyDoneText: "原文已复制"
+            });
+          }
+        })
         .catch((e) => console.warn("[Baseline] original render failed:", e));
     }
 
@@ -584,6 +597,9 @@
       // Insert left BEFORE the existing right column so reading order
       // is left → right.
       leafContent.insertBefore(leftView, rightView);
+      // Two-pane shared class drives layout (see extension.css); the
+      // bilingual-specific class is for any future bilingual-only tweaks.
+      document.body.classList.add("bsw-twopane-active");
       document.body.classList.add("bsw-bilingual-active");
       renderOriginal();
       scrollSyncTeardown = setupScrollSync();
@@ -592,6 +608,7 @@
     function disableBilingual() {
       if (!bilingualOn) return;
       bilingualOn = false;
+      document.body.classList.remove("bsw-twopane-active");
       document.body.classList.remove("bsw-bilingual-active");
       if (scrollSyncTeardown) { scrollSyncTeardown(); scrollSyncTeardown = null; }
       if (leftView && leftView.parentNode) leftView.parentNode.removeChild(leftView);
@@ -622,8 +639,9 @@
       // Viewer is the translated view itself — no point offering to
       // translate it again. Hides the entire Translate row.
       translateMode: "hidden",
-      // Show the 双栏对照 width option — viewer has both texts in scope.
-      bilingualEnabled: true,
+      // Viewer surface — switcher shows 双栏对照 (and hides 分栏视图,
+      // which is md-only).
+      context: "viewer",
       onPresetChange: async (value) => {
         lastPreset = value;
         applyPreset(await loadPreset(value));

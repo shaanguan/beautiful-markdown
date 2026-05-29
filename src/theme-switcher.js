@@ -48,10 +48,14 @@
     { value: "standard",  label: "Standard" },
     { value: "wide",      label: "Wide" },
     { value: "full",      label: "Full" },
-    // Viewer-only: side-by-side original / translation. Hidden in the
-    // ordinary .md tab because there's nothing to compare against; the
-    // viewer opts in via `mount({ bilingualEnabled: true, ... })`.
-    { value: "bilingual", label: "双栏对照", viewerOnly: true }
+    // Bilingual: viewer-only — original / translation side-by-side with
+    // paragraph-index scroll sync. The ordinary .md tab has nothing to
+    // compare against, so we hide it there.
+    { value: "bilingual", label: "Bilingual", availableIn: "viewer" },
+    // Split: md-only — user picks an arbitrary second markdown to
+    // compare side-by-side. Independent scroll. The viewer already has
+    // Bilingual which serves the same surface, so we hide Split there.
+    { value: "split",     label: "Split",     availableIn: "md" }
   ];
 
   /**
@@ -195,9 +199,13 @@
     widthRow.setAttribute("role", "group");
     widthRow.setAttribute("aria-label", "Reading width");
     const widthButtons = new Map();
-    const showBilingual = opts.bilingualEnabled === true;
+    // Caller declares its surface ("viewer" or "md", default "md") so we
+    // can filter context-specific width entries. Backwards-compatible
+    // shim: legacy `bilingualEnabled: true` is treated as `context:
+    // "viewer"` for older callers that still pass the old flag.
+    const ctx = opts.context || (opts.bilingualEnabled === true ? "viewer" : "md");
     for (const w of WIDTHS) {
-      if (w.viewerOnly && !showBilingual) continue;
+      if (w.availableIn && w.availableIn !== ctx) continue;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "bsw-mode-item";

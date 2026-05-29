@@ -187,7 +187,6 @@
     toggle.dataset.tooltip = "目录";
     toggle.setAttribute("aria-label", "Toggle table of contents");
     toggle.setAttribute("aria-expanded", "true");
-    toggle.title = "目录";
     toggle.innerHTML = listIcon();
     // If a previous mount left a toggle, replace it rather than stack.
     const oldToggle = tools.querySelector(":scope > .bsw-toc-toggle");
@@ -376,7 +375,6 @@
     btn.className = "bsw-doc-tool";
     btn.dataset.action = action;
     btn.dataset.tooltip = tooltip;
-    btn.title = tooltip;
     btn.setAttribute("aria-label", tooltip);
     btn.innerHTML = svg;
     btn.addEventListener("click", onClick);
@@ -388,18 +386,21 @@
     if (!contentWrap) return null;
     const tools = ensureToolsRow(contentWrap);
 
-    // Re-render: drop existing edit/copy buttons. Toggle is owned by
+    // Re-render: drop existing edit/copy/swap buttons. Toggle is owned by
     // mountTOC and stays put.
     for (const old of tools.querySelectorAll(
       ":scope > .bsw-doc-tool[data-action='edit'], " +
-      ":scope > .bsw-doc-tool[data-action='copy']"
+      ":scope > .bsw-doc-tool[data-action='copy'], " +
+      ":scope > .bsw-doc-tool[data-action='swap']"
     )) {
       old.remove();
     }
 
-    // Insertion order: edit, copy, [toggle if present]. We always
-    // insertBefore the toggle so the visual order is edit | copy | toc,
+    // Insertion order: edit, copy, swap, [toggle if present]. We always
+    // insertBefore the toggle so the visual order is edit | copy | swap | toc,
     // regardless of whether mountDocActions runs before or after mountTOC.
+    // In 分栏视图 (split) mode the TOC is suppressed entirely and `swap`
+    // ("换文件") takes the rightmost slot — same row, no extra positioning.
     const toggle = tools.querySelector(":scope > .bsw-toc-toggle");
 
     if (opts && typeof opts.onEdit === "function") {
@@ -431,11 +432,23 @@
       else tools.appendChild(copy);
     }
 
+    if (opts && typeof opts.onSwap === "function") {
+      const swap = makeToolButton({
+        action: "swap",
+        tooltip: opts.swapTooltip || "换文件",
+        svg: folderOpenIcon(),
+        onClick: () => opts.onSwap()
+      });
+      if (toggle) tools.insertBefore(swap, toggle);
+      else tools.appendChild(swap);
+    }
+
     return {
       destroy() {
         for (const el of tools.querySelectorAll(
           ":scope > .bsw-doc-tool[data-action='edit'], " +
-          ":scope > .bsw-doc-tool[data-action='copy']"
+          ":scope > .bsw-doc-tool[data-action='copy'], " +
+          ":scope > .bsw-doc-tool[data-action='swap']"
         )) {
           el.remove();
         }
@@ -503,6 +516,21 @@
       '<path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360' +
       'q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480Z' +
       'M200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/>' +
+      '</svg>'
+    );
+  }
+
+  // Material Symbols "folder_open" — used by the 分栏视图 swap button
+  // ("换文件") and the empty-state file picker. Same outline style as the
+  // other tool icons so the doc-tools row stays visually homogeneous.
+  function folderOpenIcon() {
+    return (
+      '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" ' +
+      'viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">' +
+      '<path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h207' +
+      'q16 0 30.5 6t25.5 17l57 57h360q33 0 56.5 23.5T920-640H447l-80-80H160v480' +
+      'l96-320h684L837-217q-8 26-29.5 41.5T760-160H160Zm84-80h516l72-240H316' +
+      'l-72 240Zm0 0 72-240-72 240Zm-84-400v-80 80Z"/>' +
       '</svg>'
     );
   }

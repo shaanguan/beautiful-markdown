@@ -44,8 +44,15 @@
   };
 
   const CUSTOM_PREFIX = "custom:";
-  const WIDTH_VALUES = new Set(["standard", "wide", "full"]);
-  const WIDTH_CLASSES = ["bsw-width-standard", "bsw-width-wide", "bsw-width-full"];
+  // "split" is the md-side two-pane mode: user picks an arbitrary second
+  // markdown to compare side-by-side (independent scroll, no sync). The
+  // viewer's "bilingual" mode is intentionally NOT in this set — applyWidth
+  // strips unknown values back to "standard", so a viewer-set "bilingual"
+  // syncs into a normal .md tab without breaking the layout.
+  const WIDTH_VALUES = new Set(["standard", "wide", "full", "split"]);
+  const WIDTH_CLASSES = [
+    "bsw-width-standard", "bsw-width-wide", "bsw-width-full", "bsw-width-split"
+  ];
 
   function isMarkdownURL(url) {
     try {
@@ -271,6 +278,105 @@
     return sizer;
   }
 
+  // ── 分栏视图 (split-pane) helpers ────────────────────────────────
+  // Mirrors viewer.js's bilingual scaffold: append a sibling .view-content
+  // to .workspace-leaf-content. The CSS rules under body.bsw-twopane-active
+  // do the actual flex layout. Unlike bilingual we do NOT sync scroll; the
+  // user picks an arbitrary second markdown file for free comparison.
+
+  // Build the right-side .view-content + sizer chain. Same shape as
+  // buildScaffold's view-content branch so theme/preset/width selectors
+  // apply uniformly. `bsw-side-right` is left on so future right-only
+  // tweaks have a hook; today only the column-1 vs column-2 toolbars
+  // differ, and that difference is wholly in JS.
+  function buildSplitScaffold() {
+    const view = document.createElement("div");
+    view.className = "view-content bsw-side-right";
+
+    const reading = document.createElement("div");
+    reading.className = "markdown-reading-view";
+
+    const preview = document.createElement("div");
+    preview.className =
+      "markdown-preview-view markdown-rendered is-readable-line-width " +
+      "allow-fold-headings show-properties is-snapped";
+
+    const sizer = document.createElement("div");
+    sizer.className = "markdown-preview-sizer markdown-preview-section";
+
+    preview.appendChild(sizer);
+    reading.appendChild(preview);
+    view.appendChild(reading);
+    return { view, preview, sizer };
+  }
+
+  // Empty-state UI for the second column: matches the dashed-border
+  // "Import preset" affordance in the settings panel (.bsw-import-button)
+  // so the chrome reads as the same "click to load" idiom the user already
+  // knows. The honest note about image/wikilink limits sits underneath.
+  function buildSplitEmptyUI(onPick) {
+    const empty = document.createElement("div");
+    empty.className = "bsw-split-empty";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    // Reuse the Import-preset visual: dashed border, ghost background,
+    // accent on hover. `bsw-split-pick` only exists to widen the click
+    // target inside the empty centred container.
+    btn.className = "bsw-import-button bsw-split-pick";
+    // Material Symbols folder_open SVG from BaselineTOC for icon parity
+    // with edit/copy/swap in the doc-tools row.
+    const iconHTML =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" ' +
+      'viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">' +
+      '<path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h207' +
+      'q16 0 30.5 6t25.5 17l57 57h360q33 0 56.5 23.5T920-640H447l-80-80H160v480' +
+      'l96-320h684L837-217q-8 26-29.5 41.5T760-160H160Zm84-80h516l72-240H316' +
+      'l-72 240Zm0 0 72-240-72 240Zm-84-400v-80 80Z"/>' +
+      '</svg>';
+    btn.innerHTML = iconHTML + '<span>Open markdown file</span>';
+    btn.addEventListener("click", onPick);
+
+    const note = document.createElement("p");
+    note.className = "bsw-split-empty-note";
+    // Honest about the structural limitation — File API gives us text,
+    // not a directory base, so relative-path images won't resolve.
+    note.textContent = "图片和 wikilink 链接可能无法解析";
+
+    empty.appendChild(btn);
+    empty.appendChild(note);
+    return empty;
+  }
+
+  // Hidden <input type="file"> shared by both columns' file pickers. Same
+  // pattern as theme-switcher.js's preset import flow. Each enableSplit()
+  // call creates its own instance; rebind onLoaded per use to route the
+  // result to the right column.
+  function makeFileInput(onLoaded) {
+    const input = document.createElement("input");
+    input.type = "file";
+    // Accept the markdown extensions we already recognise plus plain
+    // text so a user with .txt notes can still load them. The OS dialog
+    // still lets users override to "All Files".
+    input.accept = ".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain";
+    input.hidden = true;
+    input.addEventListener("change", () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        onLoaded(String(reader.result || ""), f.name || "");
+      };
+      reader.onerror = () => {
+        console.warn("[Baseline] split file read failed:", reader.error);
+      };
+      reader.readAsText(f);
+      // Reset so picking the same file twice still triggers change.
+      input.value = "";
+    });
+    return input;
+  }
+
   async function fetchRawMarkdown() {
     const pre = document.body.querySelector(":scope > pre");
     if (pre && pre.textContent && pre.textContent.length > 0) return pre.textContent;
@@ -448,6 +554,16 @@
     const settings = await getSyncSettings();
     if (location.protocol !== "file:" && !settings.enabledOnHttp) return;
 
+    // Split is a per-tab ephemeral state, intentionally NOT synced via
+    // chrome.storage.sync (each tab picks its own 2nd file; propagating
+    // it would leave other tabs with a useless empty column). An older
+    // build did persist split — clean it out here so legacy storage
+    // doesn't keep auto-enabling split on every tab.
+    if (settings.width === "split") {
+      settings.width = "standard";
+      chrome.storage.sync.set({ width: "standard" });
+    }
+
     let customPresets = await getCustomPresets();
 
     // If storage still holds a preset we no longer recognize (e.g. user
@@ -478,6 +594,202 @@
     await window.BaselineRenderer.renderTo(source, mountEl);
 
     mountNavChrome(mountEl);
+
+    // ── 分栏视图 (split-pane) state ─────────────────────────────────
+    // The user can pick a 2nd markdown via <input type="file"> to read
+    // side-by-side. Independent scroll, no sync. State is per-tab and
+    // per-session — closing the tab forgets the picked file.
+    //
+    // Each column owns its own [edit, copy, swap] doc-tools row built via
+    // BaselineTOC.mountDocActions. Column 1 starts with the tab-URL file
+    // (sourceMarkdown below), but the swap button lets it drift to any
+    // user-picked file too — reloading restores the URL file.
+
+    let splitOn = false;
+    let splitView = null;        // .view-content.bsw-side-right (DOM)
+    let splitMountEl = null;     // sizer inside splitView (null when empty)
+    let splitPreview = null;     // .markdown-preview-view inside splitView
+    let splitFileName = "";      // right-column's currently loaded filename
+
+    // Column 1's source-of-truth text. Initially the tab-URL markdown;
+    // swapping rebinds it so copy/edit reflect whatever is shown.
+    let leftMarkdown = state.originalMarkdown || source;
+    let leftFileName = "";
+
+    // Two hidden inputs (one per column) — sharing one input forces us
+    // to track "which column requested?" via a captured closure, and the
+    // small DOM duplication is cheaper than that bookkeeping.
+    const rightInput = makeFileInput((text, name) => {
+      splitFileName = name;
+      mountSplitContent(text);
+    });
+    const leftInput = makeFileInput((text, name) => {
+      leftFileName = name;
+      state.originalMarkdown = text;
+      leftMarkdown = text;
+      window.BaselineRenderer.renderTo(text, mountEl)
+        .then(() => mountNavChrome(mountEl))
+        // Re-add the swap button after mountNavChrome rebuilt the toolbar.
+        .then(() => attachLeftSwapButton())
+        .catch((e) => console.warn("[Baseline] left swap render failed:", e));
+    });
+    document.body.appendChild(rightInput);
+    document.body.appendChild(leftInput);
+
+    function getLeafContent() {
+      // mountEl → preview-sizer; walk up to the .view-content's parent.
+      const view = mountEl.closest(".view-content");
+      return view && view.parentNode;
+    }
+
+    // Inject the swap button into column 1's existing doc-tools row.
+    // Idempotent: removes any prior swap before re-adding so re-renders
+    // don't stack duplicates. Only active while splitOn — disableSplit
+    // strips it back out.
+    function attachLeftSwapButton() {
+      if (!splitOn) return;
+      if (!window.BaselineTOC || !window.BaselineTOC.mountDocActions) return;
+      // Edit only makes sense while column 1 still shows the tab-URL file.
+      // After a swap, leftFileName is set and location.href no longer matches
+      // the visible content — opening location in vscode would launch the
+      // wrong file. Drop the button in that case rather than mislead.
+      const canEdit = location.protocol === "file:" && !leftFileName;
+      // mountDocActions wipes existing edit/copy/swap before re-adding,
+      // so re-mounting with the full opt set keeps the row stable.
+      window.BaselineTOC.mountDocActions(mountEl, {
+        onCopy: () => leftMarkdown || "",
+        onEdit: canEdit ? openInLocalEditor : null,
+        editTooltip: "在编辑器中打开",
+        onSwap: () => leftInput.click(),
+        swapTooltip: leftFileName ? "换文件: " + leftFileName : "换文件"
+      });
+    }
+
+    // Build the empty-state UI inside splitPreview, replacing whatever
+    // is currently there (sizer or stale empty-state). Also removes the
+    // right column's doc-tools row, since there's nothing to act on.
+    function showSplitEmpty() {
+      if (!splitPreview || !splitView) return;
+      // Strip any prior content-wrap / doc-tools — empty state replaces
+      // the entire reading view, not just the sizer.
+      const reading = splitView.querySelector(".markdown-reading-view");
+      if (reading) reading.innerHTML = "";
+      const wrap = splitView.querySelector(":scope > .bsw-content-wrap");
+      if (wrap) wrap.remove();
+      splitMountEl = null;
+      splitFileName = "";
+
+      const empty = buildSplitEmptyUI(() => rightInput.click());
+      // Re-attach to the existing reading-view so width-class padding
+      // still applies. If reading was nuked, rebuild it.
+      let rv = splitView.querySelector(".markdown-reading-view");
+      if (!rv) {
+        rv = document.createElement("div");
+        rv.className = "markdown-reading-view";
+        splitView.appendChild(rv);
+      }
+      const preview = document.createElement("div");
+      preview.className =
+        "markdown-preview-view markdown-rendered is-readable-line-width " +
+        "allow-fold-headings show-properties is-snapped";
+      preview.appendChild(empty);
+      rv.appendChild(preview);
+      splitPreview = preview;
+    }
+
+    // Replace the empty-state with a fresh sizer and render the picked
+    // markdown. Mounts [edit, copy, swap] in the column's own doc-tools
+    // row via mountDocActions — same chrome as column 1.
+    function mountSplitContent(text) {
+      if (!splitView) return;
+      // Reset the column scaffold so we can call mountDocActions
+      // cleanly (it walks .markdown-reading-view → .view-content).
+      const rv = splitView.querySelector(".markdown-reading-view");
+      if (rv) rv.innerHTML = "";
+      const wrap = splitView.querySelector(":scope > .bsw-content-wrap");
+      if (wrap) wrap.remove();
+
+      let reading = splitView.querySelector(".markdown-reading-view");
+      if (!reading) {
+        reading = document.createElement("div");
+        reading.className = "markdown-reading-view";
+        splitView.appendChild(reading);
+      }
+      const preview = document.createElement("div");
+      preview.className =
+        "markdown-preview-view markdown-rendered is-readable-line-width " +
+        "allow-fold-headings show-properties is-snapped";
+      const sizer = document.createElement("div");
+      sizer.className = "markdown-preview-sizer markdown-preview-section";
+      preview.appendChild(sizer);
+      reading.appendChild(preview);
+
+      splitPreview = preview;
+      splitMountEl = sizer;
+
+      window.BaselineRenderer.renderTo(text, sizer)
+        .then(() => {
+          if (!window.BaselineTOC || !window.BaselineTOC.mountDocActions) return;
+          window.BaselineTOC.mountDocActions(sizer, {
+            onCopy: () => text || "",
+            // Right column is an in-memory File — no path to hand to
+            // a local editor, so skip the edit affordance.
+            onEdit: null,
+            onSwap: () => rightInput.click(),
+            swapTooltip: splitFileName ? "换文件: " + splitFileName : "换文件"
+          });
+        })
+        .catch((e) => console.warn("[Baseline] split render failed:", e));
+    }
+
+    function enableSplit() {
+      if (splitOn) return;
+      const leaf = getLeafContent();
+      if (!leaf) return;
+      splitOn = true;
+      const built = buildSplitScaffold();
+      splitView = built.view;
+      splitPreview = built.preview;
+      splitMountEl = null;
+      splitFileName = "";
+      // Append AFTER the existing column so reading order is current →
+      // picked. The CSS uses `view-content + view-content` for the
+      // separator, which targets the second one.
+      leaf.appendChild(splitView);
+      document.body.classList.add("bsw-twopane-active");
+      document.body.classList.add("bsw-split-active");
+      showSplitEmpty();
+      attachLeftSwapButton();
+    }
+
+    function disableSplit() {
+      if (!splitOn) return;
+      splitOn = false;
+      document.body.classList.remove("bsw-twopane-active");
+      document.body.classList.remove("bsw-split-active");
+      if (splitView && splitView.parentNode) {
+        splitView.parentNode.removeChild(splitView);
+      }
+      splitView = null;
+      splitPreview = null;
+      splitMountEl = null;
+      splitFileName = "";
+      // Strip swap from column 1; mountNavChrome will rebuild the
+      // canonical edit/copy/TOC set on its next call (e.g. content swap).
+      // We do it inline here so the chrome reverts immediately on exit.
+      if (window.BaselineTOC && window.BaselineTOC.mountDocActions) {
+        window.BaselineTOC.mountDocActions(mountEl, {
+          onCopy: () => state.originalMarkdown || "",
+          onEdit: location.protocol === "file:" ? openInLocalEditor : null,
+          editTooltip: "在编辑器中打开"
+        });
+      }
+    }
+
+    // Note: we do NOT auto-enable split from storage. Split is per-tab
+    // ephemeral; the storage migration above coerces any legacy "split"
+    // value back to "standard". The user re-enables split explicitly
+    // per tab via the switcher.
 
     // Load translator settings up front so the switcher can paint the saved
     // target-language and model immediately on open. Done after first render
@@ -514,6 +826,9 @@
       initial: { preset: settings.preset, mode: settings.mode, width: settings.width },
       customPresets: projectCustom(customPresets),
       translatorSettings: translatorSettings,
+      // md surface — switcher shows 分栏视图 (and hides 双栏对照,
+      // which is viewer-only).
+      context: "md",
       onPresetChange: async (value) => {
         lastPreset = value;
         const preset = await loadPreset(value);
@@ -528,7 +843,15 @@
       onWidthChange: (value) => {
         lastWidth = value;
         applyWidth(value);
-        chrome.storage.sync.set({ width: value });
+        if (value === "split") {
+          enableSplit();
+          // Per-tab ephemeral — don't write to chrome.storage.sync.
+          // Other tabs keep whatever persisted width they had; storage
+          // still holds the user's last non-split choice as the baseline.
+        } else {
+          disableSplit();
+          chrome.storage.sync.set({ width: value });
+        }
       },
       onImportPreset: async (name, json) => {
         // Refetch first — another tab could have imported in the meantime,
@@ -644,9 +967,15 @@
           applyMode(lastMode);
         }
         if (changes.width && changes.width.newValue !== lastWidth) {
+          // Inbound width changes only carry standard/wide/full — split is
+          // per-tab and never written to storage. If a peer's width swap
+          // arrives while we're locally in split, accept it and exit split:
+          // the user explicitly changed reading-width preference, and
+          // staying in split would silently ignore that.
           lastWidth = changes.width.newValue;
           switcher.setWidth(lastWidth);
           applyWidth(lastWidth);
+          disableSplit();
         }
         return;
       }

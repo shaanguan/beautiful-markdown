@@ -150,58 +150,141 @@ body.bsw-width-full .markdown-reading-view {
   padding-right: clamp(20px, 4vw, 48px);
 }
 
-/* 双栏对照 (bilingual): two .view-content siblings inside .workspace-leaf-content.
-   Each column scrolls independently — the page itself does not scroll —
-   so paragraph-index sync code in viewer.js can drive each side via
-   container.scrollTop. */
-body.bsw-bilingual-active { overflow: hidden; }
-body.bsw-bilingual-active .workspace-leaf-content {
+/* Two-pane layout (shared by 双栏对照 and 分栏视图): two .view-content
+   siblings inside .workspace-leaf-content. Each column scrolls
+   independently — the page itself does not scroll — so paragraph-index
+   sync code (bilingual only, in viewer.js) can drive each side via
+   container.scrollTop, and split mode lets users free-scroll. */
+body.bsw-twopane-active { overflow: hidden; }
+body.bsw-twopane-active .workspace-leaf-content {
   display: flex;
   flex-direction: row;
   height: 100vh;
   align-items: stretch;
 }
-body.bsw-bilingual-active .workspace-leaf-content > .view-content {
+body.bsw-twopane-active .workspace-leaf-content > .view-content {
   flex: 1 1 0;
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
 }
-body.bsw-bilingual-active .workspace-leaf-content > .view-content + .view-content {
+body.bsw-twopane-active .workspace-leaf-content > .view-content + .view-content {
   border-left: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.08));
 }
 /* Inside each column, shrink the standard reading-view padding so two
    columns don't waste half the viewport on margins. The sizer's
-   max-width still respects whatever non-bilingual width was active. */
-body.bsw-bilingual-active .markdown-reading-view {
+   max-width still respects whatever non-twopane width was active. */
+body.bsw-twopane-active .markdown-reading-view {
   padding-left: clamp(16px, 2vw, 32px);
   padding-right: clamp(16px, 2vw, 32px);
 }
-body.bsw-bilingual-active .markdown-preview-view.markdown-rendered,
-body.bsw-bilingual-active .markdown-preview-sizer.markdown-preview-section {
+body.bsw-twopane-active .markdown-preview-view.markdown-rendered,
+body.bsw-twopane-active .markdown-preview-sizer.markdown-preview-section {
   max-width: 100% !important;
 }
 
 /* Suppress TOC chrome — fixed-position rail collides with the two-column
    flex layout, and the progress bar overlaps the column boundary. */
-body.bsw-bilingual-active #baseline-toc,
-body.bsw-bilingual-active .bsw-toc-toggle,
-body.bsw-bilingual-active #baseline-progress-bar {
+body.bsw-twopane-active #baseline-toc,
+body.bsw-twopane-active .bsw-toc-toggle,
+body.bsw-twopane-active #baseline-progress-bar {
   display: none !important;
 }
 /* …but the .bsw-with-toc / :not(.bsw-toc-collapsed) classes can still be
-   on the right-column .view-content (if the user opened the TOC before
-   switching to bilingual). Hiding only the panel itself isn't enough —
-   the content-wrap's `padding-right: 360px` would crush the right column.
+   on the active .view-content (if the user opened the TOC before
+   switching to two-pane). Hiding only the panel itself isn't enough —
+   the content-wrap's `padding-right: 360px` would crush the column.
    Zero out that reservation, and snap the doc-tools row back to the
    column edge so edit / copy stay reachable. */
-body.bsw-bilingual-active .view-content.bsw-with-toc > .bsw-content-wrap,
-body.bsw-bilingual-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) > .bsw-content-wrap {
+body.bsw-twopane-active .view-content.bsw-with-toc > .bsw-content-wrap,
+body.bsw-twopane-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) > .bsw-content-wrap {
   padding-right: 0 !important;
 }
-body.bsw-bilingual-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-doc-tools {
-  right: 12px !important;
+body.bsw-twopane-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-doc-tools {
+  /* In twopane, align-self handles horizontal placement — clear the
+     legacy 372px push so it doesn't fight the flex-end alignment. */
+  right: auto !important;
+}
+
+/* 分栏视图 (split): empty-state UI for the second column before the
+   user has picked a file. Centred dashed-border picker that visually
+   matches the "Import preset" affordance in the settings panel, plus a
+   one-line note about the image/wikilink limitation. */
+.bsw-split-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 14px;
+  padding: 32px 24px;
+  color: var(--bsw-text-muted, #6e7681);
+  text-align: center;
+}
+/* Adopt the .bsw-import-button look (dashed border, ghost background)
+   inside the empty container. `.bsw-import-button` rules are scoped to
+   #baseline-switcher; we re-state the bare visual contract here so it
+   also paints inside the split column where #baseline-switcher isn't
+   an ancestor. */
+.bsw-split-empty .bsw-import-button.bsw-split-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  width: auto;
+  margin: 0;
+  border: 1px dashed var(--background-modifier-border, rgba(0, 0, 0, 0.18));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bsw-text-muted, #6e7681);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.bsw-split-empty .bsw-import-button.bsw-split-pick:hover {
+  color: var(--interactive-accent, #2c84db);
+  border-color: var(--interactive-accent, #2c84db);
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.04));
+}
+.bsw-split-empty-note {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.75;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+/* In two-pane mode (bilingual OR split), each column owns its own
+   doc-tools row. The single-column rule pins it to viewport top-right
+   via position:fixed — that would collapse both columns' rows onto the
+   same viewport corner. We need the row to (a) sit at each column's
+   top-right and (b) follow scroll so it stays reachable in long docs.
+   Solution: make .bsw-content-wrap a flex column so the doc-tools is
+   a flex item; `align-self: flex-end` handles horizontal placement,
+   `position: sticky` + `top: 12px` handles vertical follow inside
+   .view-content (which is overflow:auto in twopane). All !important
+   to defeat the default rule's `position: fixed` + the `.bsw-with-toc`
+   `right: 372px` push, both of which would otherwise win on cascade. */
+body.bsw-twopane-active .bsw-content-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+}
+body.bsw-twopane-active .bsw-content-wrap > .bsw-doc-tools {
+  position: sticky !important;
+  top: 12px !important;
+  /* doc-tools is appended AFTER reading-view by ensureToolsRow, so in
+     flex order it lands at the column's bottom. order:-1 hoists it to
+     the top so sticky has somewhere to actually stick from. */
+  order: -1 !important;
+  align-self: flex-end !important;
+  right: auto !important;
+  left: auto !important;
+  margin: 0 12px 0 0 !important;
+  z-index: 5;
 }
 
 /* Wikilink / tag / embed styling fallback (Baseline mostly covers it,
