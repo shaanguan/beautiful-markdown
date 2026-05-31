@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>编辑 Markdown — Beautiful Markdown</title>
+  <link rel="stylesheet" href="styles/theme.css" />
+  <link rel="stylesheet" href="styles/extension.css" />
+  <link rel="stylesheet" href="styles/claude-preset.css" />
+</head>
+<body class="bsw-edit-page">
+  <div class="bsw-edit-scroll">
+  <div class="bsw-edit-shell">
+    <header class="bsw-edit-header">
+      <h1 class="bsw-edit-heading" id="bsw-edit-heading">文本编辑</h1>
+      <div class="bsw-edit-actions">
+        <button
+          type="button"
+          class="bsw-edit-tool"
+          id="bsw-edit-undo"
+          aria-label="撤销"
+          title="撤销 (⌘Z)"
+          disabled
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" aria-hidden="true">
+            <path d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z"/>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="bsw-edit-tool"
+          id="bsw-edit-redo"
+          aria-label="重做"
+          title="重做 (⌘⇧Z)"
+          disabled
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" aria-hidden="true">
+            <path d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z"/>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="bsw-edit-tool bsw-edit-save"
+          id="bsw-edit-save"
+          aria-label="保存"
+          title="保存 (⌘↵)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" aria-hidden="true">
+            <path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+    <main class="bsw-edit-main">
+      <div class="bsw-edit-scroll-mirror" id="bsw-edit-scroll-mirror" aria-hidden="true"></div>
+      <textarea
+        class="bsw-edit-input"
+        id="bsw-edit-input"
+        spellcheck="false"
+        aria-labelledby="bsw-edit-heading"
+      ></textarea>
+    </main>
+  </div>
+  </div>
+  <script src="src/edit.js"></script>
+</body>
+</html>

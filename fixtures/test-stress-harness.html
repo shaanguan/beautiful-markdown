@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>BSW stress harness</title>
+  <link rel="stylesheet" href="../vendor/katex.min.css" />
+  <link rel="stylesheet" href="../styles/theme.css" />
+  <link rel="stylesheet" href="../styles/extension.css" />
+</head>
+<body class="theme-light">
+  <div class="markdown-preview-view markdown-rendered">
+    <div class="markdown-preview-sizer" id="mount"></div>
+  </div>
+  <pre id="results"></pre>
+  <script src="../vendor/marked.min.js"></script>
+  <script src="../vendor/purify.min.js"></script>
+  <script src="../vendor/highlight.min.js"></script>
+  <script src="../vendor/katex.min.js"></script>
+  <script src="../vendor/katex-auto-render.min.js"></script>
+  <script src="../src/obsidian-syntax.js"></script>
+  <script src="../src/renderer.js"></script>
+  <script>
+    (async () => {
+      const mount = document.getElementById("mount");
+      const md = await fetch("markdown-renderer-stress-test.md").then((r) => r.text());
+      await BaselineRenderer.renderTo(md, mount, { baseUrl: location.href });
+      const img = mount.querySelector('img[src*="placeholder"]');
+      const lines = [
+        ["highlight", mount.querySelector("mark")?.textContent === "highlighted text"],
+        ["sub", mount.innerHTML.includes("<sub>2</sub>")],
+        ["sup", mount.innerHTML.includes("<sup>2</sup>")],
+        ["strike", mount.innerHTML.includes("<del>strikethrough</del>")],
+        ["emoji", mount.textContent.includes("\u{1F680}") && !mount.textContent.includes(":rocket:")],
+        ["rtl", !!mount.querySelector('[dir="rtl"]')],
+        ["https img", !!img && /placeholder\.com/.test(img.src)],
+        ["img alt", img && img.alt === "Alt text for image"]
+      ];
+      const out = lines.map(([n, ok]) => (ok ? "PASS" : "FAIL") + " " + n).join("\n");
+      document.getElementById("results").textContent = out;
+      document.title = out.includes("FAIL") ? "FAIL" : "PASS";
+    })();
+  </script>
+</body>
+</html>

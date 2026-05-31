@@ -43,6 +43,7 @@ const Core = self.BaselineTranslatorCore;
 // (one-shot) so a reload of the viewer URL is a no-op rather than an
 // accidental re-translation.
 const sessions = new Map();
+const editSessions = new Map();
 const SESSION_TTL_MS = 5 * 60 * 1000;
 
 function pruneSessions() {
@@ -51,6 +52,21 @@ function pruneSessions() {
     if (s.createdAt < cutoff) sessions.delete(id);
   }
 }
+
+function pruneEditSessions() {
+  const cutoff = Date.now() - SESSION_TTL_MS;
+  for (const [id, s] of editSessions) {
+    if (s.createdAt < cutoff) editSessions.delete(id);
+  }
+}
+
+// Toolbar icon → open a blank Beautiful Markdown tab. No default_popup is
+// set in the manifest, so onClicked fires. The page (open.html) lets the
+// user open a local .md or paste markdown and renders it with the same
+// theme as a .md file tab.
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("open.html") });
+});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "loadMermaid") {
@@ -71,6 +87,82 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         error: (err && err.message) || String(err)
       }));
     return true; // async sendResponse
+  }
+  if (msg && msg.type === "downloadMarkdown") {
+    downloadMarkdownToDisk(msg.text, msg.filename)
+      .then((path) => sendResponse({ ok: true, path }))
+      .catch((err) => sendResponse({
+        ok: false,
+        error: (err && err.message) || String(err)
+      }));
+    return true;
+  }
+  if (msg && msg.type === "openEditTab") {
+    pruneEditSessions();
+    const sessionId = crypto.randomUUID();
+    editSessions.set(sessionId, {
+      markdown: msg.markdown == null ? "" : String(msg.markdown),
+      name: msg.name == null ? "" : String(msg.name),
+      column: msg.column == null ? "main" : String(msg.column),
+      scrollRatio: Number(msg.scrollRatio) || 0,
+      scrollOffset: Number(msg.scrollOffset) || 0,
+      scrollOffsetMatched: Boolean(msg.scrollOffsetMatched),
+      sourceTabId: msg.sourceTabId != null
+        ? msg.sourceTabId
+        : (sender && sender.tab ? sender.tab.id : null),
+      createdAt: Date.now()
+    });
+    const params = new URLSearchParams({ session: sessionId });
+    if (msg.name) params.set("name", String(msg.name));
+    chrome.tabs.create({
+      url: chrome.runtime.getURL("edit.html?" + params.toString())
+    }).then(() => sendResponse({ ok: true, sessionId }))
+      .catch((err) => {
+        editSessions.delete(sessionId);
+        sendResponse({ ok: false, error: (err && err.message) || String(err) });
+      });
+    return true;
+  }
+  if (msg && msg.type === "getEditSession") {
+    const s = editSessions.get(msg.sessionId);
+    if (!s) {
+      sendResponse({ ok: false, error: "session not found" });
+      return;
+    }
+    sendResponse({
+      ok: true,
+      markdown: s.markdown,
+      name: s.name,
+      scrollRatio: s.scrollRatio,
+      scrollOffset: s.scrollOffset,
+      scrollOffsetMatched: s.scrollOffsetMatched
+    });
+    return;
+  }
+  if (msg && msg.type === "applyEdit") {
+    const s = editSessions.get(msg.sessionId);
+    if (!s) {
+      sendResponse({ ok: false, error: "session not found" });
+      return;
+    }
+    const nextText = msg.text == null ? "" : String(msg.text);
+    s.markdown = nextText;
+    s.createdAt = Date.now();
+    const payload = {
+      type: "baselineEditApplied",
+      text: nextText,
+      name: s.name || "",
+      column: s.column || "main",
+      targetTabId: s.sourceTabId == null ? null : s.sourceTabId
+    };
+    // tabs.sendMessage only reaches content scripts (file:// .md). Extension
+    // pages (open.html) need runtime.sendMessage; listeners filter targetTabId.
+    if (s.sourceTabId != null) {
+      chrome.tabs.sendMessage(s.sourceTabId, payload).catch(() => {});
+    }
+    chrome.runtime.sendMessage(payload).catch(() => {});
+    sendResponse({ ok: true });
+    return;
   }
   if (!msg || msg.type !== "registerAndOpen") return;
   pruneSessions();
@@ -531,4 +623,47 @@ function errorMessage(err) {
 
 async function safeReadText(res) {
   try { return await res.text(); } catch (_) { return ""; }
+}
+
+function downloadMarkdownToDisk(text, filename) {
+  const safeName = String(filename || "document.md")
+    .replace(/[\\\/:*?"<>|\u0000-\u001f]+/g, "")
+    .replace(/^\.+/, "")
+    .trim() || "document.md";
+  const dataUrl =
+    "data:text/markdown;charset=utf-8," + encodeURIComponent(text == null ? "" : text);
+
+  return new Promise((resolve, reject) => {
+    chrome.downloads.download(
+      { url: dataUrl, filename: safeName, saveAs: false, conflictAction: "uniquify" },
+      (downloadId) => {
+        if (chrome.runtime.lastError || !downloadId) {
+          reject(new Error(
+            (chrome.runtime.lastError && chrome.runtime.lastError.message) ||
+            "无法启动下载"
+          ));
+          return;
+        }
+
+        const onChanged = (delta) => {
+          if (delta.id !== downloadId) return;
+          if (delta.state && delta.state.current === "complete") {
+            chrome.downloads.onChanged.removeListener(onChanged);
+            chrome.downloads.search({ id: downloadId }, (items) => {
+              const item = items && items[0];
+              if (!item || !item.filename) {
+                reject(new Error("无法获取下载文件路径"));
+                return;
+              }
+              resolve(item.filename.replace(/\\/g, "/"));
+            });
+          } else if (delta.state && delta.state.current === "interrupted") {
+            chrome.downloads.onChanged.removeListener(onChanged);
+            reject(new Error("下载被中断"));
+          }
+        };
+        chrome.downloads.onChanged.addListener(onChanged);
+      }
+    );
+  });
 }

@@ -4,9 +4,9 @@
  * Loaded by viewer.html (an extension-owned page opened from the
  * service worker after the user clicks Translate). Mirrors content.js
  * activate() — same scaffold DOM, same preset/mode/width loading, same
- * switcher widget — but instead of fetching a .md file it subscribes to a
- * translation session in the background and streams chunks into the
- * reading view.
+ * switcher widget — viewer-only: bilingual width (no split), no Translate
+ * button. Subscribes to translator-bg until ingestMarkdown hands off to
+ * BaselineSurface. Paste and「换文件」both call ingestMarkdown (same as .md surface).
  *
  * Session lifecycle:
  *   URL:  chrome-extension://<id>/viewer.html?session=<uuid>
@@ -28,70 +28,26 @@
     width: "standard"
   };
 
-  const CUSTOM_PREFIX = "custom:";
+  // Preset / custom-preset plumbing is shared with the .md content script.
+  const {
+    CUSTOM_PREFIX,
+    getCustomPresets,
+    setCustomPresets,
+    loadPreset,
+    makeCustomId,
+    projectCustom,
+    openMarkdownInEditTab,
+    readColumnScroll,
+    restoreColumnScroll,
+    syncPresetMarker
+  } = window.BaselineShared;
+
   // "bilingual" is viewer-only: the original .md tab strips it via
-  // applyWidth's WIDTH_VALUES guard, so a synced setting from the viewer
-  // gracefully falls back to "standard" there.
+  // applyWidth's WIDTH_VALUES guard falls back to "standard" on .md tabs.
   const WIDTH_VALUES = new Set(["standard", "wide", "full", "bilingual"]);
   const WIDTH_CLASSES = [
     "bsw-width-standard", "bsw-width-wide", "bsw-width-full", "bsw-width-bilingual"
   ];
-
-  function getSyncSettings() {
-    return new Promise((resolve) => {
-      chrome.storage.sync.get(DEFAULT_SETTINGS, (items) => resolve(items));
-    });
-  }
-
-  function getCustomPresets() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get({ customPresets: [] }, (items) => {
-        const list = Array.isArray(items.customPresets) ? items.customPresets : [];
-        resolve(list);
-      });
-    });
-  }
-
-  function setCustomPresets(list) {
-    return new Promise((resolve) => {
-      chrome.storage.local.set({ customPresets: list }, () => resolve());
-    });
-  }
-
-  function compileFromJSON(json) {
-    const compiled = window.BaselinePreset.compilePreset(json);
-    return {
-      css: window.BaselinePreset.presetToCSS(json),
-      classesCommon: compiled.classesCommon,
-      classesLight: compiled.classesLight,
-      classesDark: compiled.classesDark
-    };
-  }
-
-  function emptyPreset() {
-    return { css: "", classesCommon: [], classesLight: [], classesDark: [] };
-  }
-
-  async function loadPreset(presetName) {
-    if (!presetName || presetName === "default") return emptyPreset();
-    if (presetName.startsWith(CUSTOM_PREFIX)) {
-      const list = await getCustomPresets();
-      const found = list.find((p) => p.id === presetName);
-      if (!found) return emptyPreset();
-      try { return compileFromJSON(found.json); }
-      catch (e) { console.warn("[Baseline] custom preset compile failed:", e); return emptyPreset(); }
-    }
-    try {
-      const url = chrome.runtime.getURL(`presets/${presetName}.json`);
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      return compileFromJSON(json);
-    } catch (e) {
-      console.warn("[Baseline] preset load failed:", e);
-      return emptyPreset();
-    }
-  }
 
   const state = {
     mode: "light",
@@ -206,132 +162,33 @@
     return sizer;
   }
 
-  function makeCustomId(name, existingIds) {
-    const base = String(name || "preset")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "preset";
-    let candidate = CUSTOM_PREFIX + base;
-    let n = 2;
-    while (existingIds.has(candidate)) {
-      candidate = CUSTOM_PREFIX + base + "-" + n++;
-    }
-    return candidate;
+  function isEditablePasteTarget(el) {
+    if (!el) return false;
+    if (el.closest && el.closest("#baseline-switcher")) return true;
+    const tag = el.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
   }
 
-  function projectCustom(list) {
-    return list.map((p) => ({ id: p.id, name: p.name }));
-  }
-
-  function mountNavChrome(mountEl, getCopyText, onEdit) {
-    if (!window.BaselineTOC) return;
-    const container = mountEl.closest(".view-content");
-    if (container) {
-      const oldToc = container.querySelector(":scope > #baseline-toc");
-      if (oldToc) oldToc.remove();
-      const oldToggle = container.querySelector(".bsw-doc-tools > .bsw-toc-toggle");
-      if (oldToggle) oldToggle.remove();
-      container.classList.remove("bsw-with-toc", "bsw-toc-collapsed");
-    }
-    const headingIndex = window.BaselineTOC.buildHeadingIndex(mountEl);
-    window.BaselineTOC.mountHeadingAnchors(headingIndex);
-    window.BaselineTOC.mountTOC(headingIndex, mountEl);
-    // Edit on the viewer means "save the translation to disk and open it
-    // in VS Code" — translated content has no source path, so we mint one
-    // by routing through chrome.downloads. Copy is always available.
-    if (window.BaselineTOC.mountDocActions) {
-      window.BaselineTOC.mountDocActions(mountEl, {
-        onCopy: typeof getCopyText === "function" ? getCopyText : () => "",
-        copyTooltip: "复制译文",
-        onEdit: typeof onEdit === "function" ? onEdit : null,
-        editTooltip: "下载并用编辑器打开"
-      });
-    }
-    window.BaselineTOC.mountProgressBar();
-  }
-
-  // Build the on-disk filename for the Edit button. Sanitize the source
-  // name (Chrome rejects path separators / control chars in download
-  // filenames) and append the target language so the user can tell
-  // multiple translations apart in their Downloads folder.
-  function sanitizeFilenamePart(s, fallback) {
-    // Strip Windows-illegal chars + control chars so Chrome doesn't
-    // reject the download. Spaces and hyphens are kept — they're
-    // valid on every OS and the user's source filename may rely on them.
-    const cleaned = String(s == null ? "" : s)
-      .replace(/[\\\/:*?"<>|\u0000-\u001f]+/g, "")
-      .replace(/^\.+/, "")
-      .trim();
-    return cleaned || fallback;
-  }
-
-  function buildTranslatedFilename(sourceName, lang) {
-    const base = sanitizeFilenamePart(sourceName, "document");
-    const langPart = sanitizeFilenamePart(lang, "");
-    // "自动判断" is the auto-detect sentinel — fall back to a neutral
-    // label so we don't bake the marker into the filename.
-    const useLang = langPart && langPart !== "自动判断" ? langPart : "translated";
-    return `${base}.${useLang}.md`;
-  }
-
-  // Save the translated markdown to disk via chrome.downloads, then hand
-  // the resulting absolute path off to VS Code via the vscode://file/
-  // protocol. We need the absolute path (not the blob URL) because the
-  // editor doesn't speak blob:.
-  function downloadAndOpenInEditor(text, filename) {
-    return new Promise((resolve, reject) => {
-      let url;
-      try {
-        url = URL.createObjectURL(new Blob([text || ""], { type: "text/markdown" }));
-      } catch (e) {
-        reject(e);
-        return;
-      }
-
-      chrome.downloads.download(
-        { url, filename, saveAs: false, conflictAction: "uniquify" },
-        (downloadId) => {
-          if (chrome.runtime.lastError || !downloadId) {
-            try { URL.revokeObjectURL(url); } catch (_) {}
-            reject(new Error(
-              (chrome.runtime.lastError && chrome.runtime.lastError.message) ||
-              "无法启动下载"
-            ));
-            return;
-          }
-
-          const onChanged = (delta) => {
-            if (delta.id !== downloadId) return;
-            if (delta.state && delta.state.current === "complete") {
-              chrome.downloads.onChanged.removeListener(onChanged);
-              try { URL.revokeObjectURL(url); } catch (_) {}
-              chrome.downloads.search({ id: downloadId }, (items) => {
-                const item = items && items[0];
-                if (!item || !item.filename) {
-                  reject(new Error("无法获取下载文件路径"));
-                  return;
-                }
-                // Windows paths use backslashes; vscode://file/ expects
-                // forward slashes. Drive prefix (C:) stays intact.
-                const path = item.filename.replace(/\\/g, "/");
-                try {
-                  location.href = "vscode://file/" + path;
-                  resolve();
-                } catch (err) {
-                  reject(err);
-                }
-              });
-            } else if (delta.state && delta.state.current === "interrupted") {
-              chrome.downloads.onChanged.removeListener(onChanged);
-              try { URL.revokeObjectURL(url); } catch (_) {}
-              reject(new Error("下载被中断"));
-            }
-          };
-          chrome.downloads.onChanged.addListener(onChanged);
-        }
-      );
+  function makeFileInput(onLoaded) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain";
+    input.hidden = true;
+    input.addEventListener("change", () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        onLoaded(String(reader.result || ""), f.name || "");
+      };
+      reader.onerror = () => {
+        console.warn("[Baseline] file read failed:", reader.error);
+      };
+      reader.readAsText(f);
+      input.value = "";
     });
+    document.body.appendChild(input);
+    return input;
   }
 
   // ── Status pill ────────────────────────────────────────────────────
@@ -448,7 +305,7 @@
     const sourceName = params.get("name") || "document";
     const targetLanguage = params.get("lang") || "";
 
-    const settings = await getSyncSettings();
+    const settings = Object.assign({}, DEFAULT_SETTINGS);
     let customPresets = await getCustomPresets();
 
     const builtIn = new Set(window.BaselineSwitcher.PRESETS.map((p) => p.value));
@@ -460,18 +317,224 @@
     const mountEl = buildScaffold();
     state.mountEl = mountEl;
 
-    // ── Bilingual (双栏对照) state ─────────────────────────────────────
-    // Original markdown is sent on the translator-session port right
-    // after subscribe (translator-bg.js). We stash it here so toggling
-    // 双栏对照 later can render the left column instantly.
+    // Translation stream state (hoisted so column paste/swap can stop it).
+    let done = false;
+    let renderScheduled = false;
+    let renderTimer = 0;
+    let lastText = "";
+    let statusPill = null;
+
+    // ── Bilingual (双栏对照); swap/paste → BaselineSurface (plain .md) ─
+    let handedOff = false;
     let originalMarkdown = "";
+    let rightMarkdown = "";
+    let leftFileName = "";
+    let rightFileName = "";
     let bilingualOn = false;
-    let leftView = null;        // .view-content.bsw-side-left
-    let leftMountEl = null;     // .markdown-preview-sizer inside leftView
+    let leftView = null;
+    let leftMountEl = null;
     let leftRendered = false;
     let scrollSyncTeardown = null;
     const rightView = mountEl.closest(".view-content");
     const leafContent = rightView && rightView.parentNode;
+
+    function tearDownScrollSync() {
+      if (scrollSyncTeardown) {
+        scrollSyncTeardown();
+        scrollSyncTeardown = null;
+      }
+    }
+
+    function maybeSetupScrollSync() {
+      tearDownScrollSync();
+      if (handedOff || !bilingualOn || !leftView || !rightView) return;
+      scrollSyncTeardown = setupScrollSync();
+    }
+
+    let port = null;
+    let syncStorageListener = null;
+    let schemeMq = null;
+    let onSchemeChange = null;
+
+    function stopTranslationStream() {
+      done = true;
+      tearDownScrollSync();
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = 0;
+        renderScheduled = false;
+      }
+      try { if (port) port.disconnect(); } catch (_) {}
+      if (statusPill) statusPill.hide();
+    }
+
+    function openEditTab(markdown, name, column, mountEl) {
+      openMarkdownInEditTab(markdown, name, column, mountEl).catch((err) => {
+        console.warn("[Baseline] open edit tab failed:", err);
+        if (statusPill) {
+          statusPill.setError(
+            "无法打开编辑页：" + ((err && err.message) || String(err))
+          );
+        }
+      });
+    }
+
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (!msg || msg.type !== "baselineEditApplied" || handedOff) return;
+      const apply = () => {
+        const label = msg.name || "编辑的内容";
+        if (msg.column === "left") {
+          originalMarkdown = msg.text;
+          leftRendered = false;
+          renderOriginal();
+          return;
+        }
+        rightMarkdown = msg.text;
+        lastText = msg.text;
+        done = true;
+        const savedScroll = readColumnScroll(mountEl);
+        window.BaselineRenderer.renderTo(msg.text, mountEl)
+          .then(() => {
+            restoreColumnScroll(mountEl, savedScroll);
+            mountRightChrome();
+          })
+          .catch((e) => console.warn("[Baseline] edit apply render failed:", e));
+      };
+      if (msg.targetTabId == null) {
+        apply();
+        return;
+      }
+      chrome.tabs.getCurrent((tab) => {
+        if (!tab || tab.id !== msg.targetTabId) return;
+        apply();
+      });
+    });
+
+    function mountRightChrome() {
+      if (!window.BaselineTOC || !window.BaselineTOC.mountChrome) return;
+      window.BaselineTOC.mountChrome(mountEl, {
+        getMarkdown: () => rightMarkdown || "",
+        copyTooltip: "复制译文",
+        copyDoneText: "译文已复制",
+        onEdit: () => {
+          openEditTab(
+            rightMarkdown,
+            sourceName,
+            bilingualOn ? "right" : "main",
+            mountEl
+          );
+        },
+        editTooltip: "在新标签页编辑",
+        onSwap: () => rightFileInput.click(),
+        swapTooltip: "换文件",
+        withTOC: !bilingualOn
+      });
+    }
+
+    function mountLeftChrome() {
+      if (!leftMountEl || !window.BaselineTOC || !window.BaselineTOC.mountChrome) return;
+      window.BaselineTOC.mountChrome(leftMountEl, {
+        getMarkdown: () => originalMarkdown || "",
+        copyTooltip: "复制原文",
+        copyDoneText: "原文已复制",
+        onEdit: () => {
+          openEditTab(
+            originalMarkdown,
+            leftFileName || sourceName,
+            "left",
+            leftMountEl
+          );
+        },
+        editTooltip: "在新标签页编辑",
+        onSwap: () => leftFileInput.click(),
+        swapTooltip: "换文件",
+        withTOC: false
+      });
+    }
+
+    function teardownViewerSessionUi() {
+      stopTranslationStream();
+      disableBilingual();
+      if (pasteBinder) {
+        if (rightView) pasteBinder.unregister(rightView);
+        if (leftView) pasteBinder.unregister(leftView);
+      }
+      document.getElementById("baseline-switcher")?.remove();
+      document.getElementById("bsw-viewer-status")?.remove();
+      document.querySelector(".app-container")?.remove();
+      switcherRef = null;
+      if (syncStorageListener) {
+        chrome.storage.onChanged.removeListener(syncStorageListener);
+        syncStorageListener = null;
+      }
+      if (schemeMq && onSchemeChange) {
+        schemeMq.removeEventListener("change", onSchemeChange);
+        schemeMq = null;
+        onSchemeChange = null;
+      }
+    }
+
+    // Paste and「换文件」→ leave translation UI, same as opening a .md file.
+    function ingestMarkdown(text, name) {
+      if (handedOff) return;
+      handoffToMdSurface(text, name || "粘贴的内容");
+    }
+
+    function handoffToMdSurface(text, name) {
+      if (handedOff) return;
+      handedOff = true;
+      teardownViewerSessionUi();
+
+      const label = name || "粘贴的内容";
+      const surfaceState = { leftMarkdown: text, leftFileName: label };
+
+      // Same module as file:// .md — including the Translate affordance.
+      window.BaselineSurface.runBootMdReadingPage({
+        initial: { markdown: text, fileName: label },
+        scaffold: { mainViewClass: "view-content bsw-side-right" },
+        onMainMarkdownChange: (md, n) => {
+          surfaceState.leftMarkdown = md;
+          surfaceState.leftFileName = n || "";
+        },
+        getTranslateMarkdown: () => surfaceState.leftMarkdown,
+        getTranslateSourceName: () => {
+          const base = (surfaceState.leftFileName || "document")
+            .replace(/\.(md|markdown|mdown|mkd)$/i, "");
+          return base || "document";
+        }
+      });
+    }
+
+    const leftFileInput = makeFileInput((text, name) => {
+      ingestMarkdown(text, name || "");
+    });
+    const rightFileInput = makeFileInput((text, name) => {
+      ingestMarkdown(text, name || "");
+    });
+
+    const pasteBinder = window.BaselineTOC && window.BaselineTOC.bindColumnPaste
+      ? window.BaselineTOC.bindColumnPaste({
+        isEditable: isEditablePasteTarget,
+        confirmReplace: () =>
+          window.confirm("当前已有内容，是否用粘贴的 Markdown 替换？")
+      })
+      : null;
+
+    function syncPasteRegistry() {
+      if (handedOff || !pasteBinder || !rightView) return;
+      pasteBinder.register(rightView, {
+        hasContent: () => Boolean((rightMarkdown || lastText || "").trim()),
+        onPaste: (text) => { ingestMarkdown(text, "粘贴的内容"); }
+      });
+      if (bilingualOn && leftView) {
+        pasteBinder.register(leftView, {
+          hasContent: () => Boolean(originalMarkdown && originalMarkdown.trim()),
+          onPaste: (text) => { ingestMarkdown(text, "粘贴的内容"); }
+        });
+      } else if (leftView) {
+        pasteBinder.unregister(leftView);
+      }
+    }
 
     function buildLeftScaffold() {
       // Mirrors buildScaffold()'s view-content > reading-view > preview > sizer
@@ -493,22 +556,14 @@
     }
 
     function renderOriginal() {
-      if (!leftMountEl || leftRendered) return;
-      if (!originalMarkdown) return; // wait for the "original" message
+      if (handedOff || !leftMountEl || leftRendered) return;
+      if (!originalMarkdown) return;
       window.BaselineRenderer.renderTo(originalMarkdown, leftMountEl)
         .then(() => {
           leftRendered = true;
-          // Mirror the translation column's edit/copy chrome on the
-          // original side so 双栏对照 reads as two equal panes (TOC and
-          // swap are intentionally omitted — bilingual has nothing to
-          // swap to, and TOC is suppressed by .bsw-twopane-active).
-          if (window.BaselineTOC && window.BaselineTOC.mountDocActions) {
-            window.BaselineTOC.mountDocActions(leftMountEl, {
-              onCopy: () => originalMarkdown,
-              copyTooltip: "复制原文",
-              copyDoneText: "原文已复制"
-            });
-          }
+          mountLeftChrome();
+          syncPasteRegistry();
+          maybeSetupScrollSync();
         })
         .catch((e) => console.warn("[Baseline] original render failed:", e));
     }
@@ -586,7 +641,7 @@
     }
 
     function enableBilingual() {
-      if (bilingualOn) return;
+      if (handedOff || bilingualOn) return;
       bilingualOn = true;
       if (!leafContent) return;
       // Build left column once per enable cycle; teardown removes it.
@@ -602,7 +657,9 @@
       document.body.classList.add("bsw-twopane-active");
       document.body.classList.add("bsw-bilingual-active");
       renderOriginal();
-      scrollSyncTeardown = setupScrollSync();
+      maybeSetupScrollSync();
+      mountRightChrome();
+      syncPasteRegistry();
     }
 
     function disableBilingual() {
@@ -610,54 +667,46 @@
       bilingualOn = false;
       document.body.classList.remove("bsw-twopane-active");
       document.body.classList.remove("bsw-bilingual-active");
-      if (scrollSyncTeardown) { scrollSyncTeardown(); scrollSyncTeardown = null; }
+      tearDownScrollSync();
+      if (leftView && pasteBinder) pasteBinder.unregister(leftView);
       if (leftView && leftView.parentNode) leftView.parentNode.removeChild(leftView);
       leftView = null;
       leftMountEl = null;
       leftRendered = false;
+      mountRightChrome();
+      syncPasteRegistry();
     }
 
     applyMode(settings.mode);
-    applyWidth(settings.width);
+    applyWidth("standard");
     applyPreset(await loadPreset(settings.preset));
-    // Honour 双栏对照 from synced settings on first paint. The "original"
-    // message hasn't arrived yet — renderOriginal() will fire when it does.
-    if (settings.width === "bilingual") enableBilingual();
-
-    let translatorSettings = window.BaselineTranslator
-      ? await window.BaselineTranslator.loadSettings()
-      : null;
+    syncPresetMarker(settings.preset);
+    syncPasteRegistry();
 
     let lastPreset = settings.preset;
     let lastMode = settings.mode;
-    let lastWidth = settings.width;
+    let lastWidth = "standard";
 
     const switcher = window.BaselineSwitcher.mount({
-      initial: { preset: settings.preset, mode: settings.mode, width: settings.width },
+      initial: { preset: settings.preset, mode: settings.mode, width: "standard" },
       customPresets: projectCustom(customPresets),
-      translatorSettings: translatorSettings,
-      // Viewer is the translated view itself — no point offering to
-      // translate it again. Hides the entire Translate row.
+      // Viewer tabs never offer Translate again — only .md / open.html do.
       translateMode: "hidden",
-      // Viewer surface — switcher shows 双栏对照 (and hides 分栏视图,
-      // which is md-only).
       context: "viewer",
       onPresetChange: async (value) => {
         lastPreset = value;
+        syncPresetMarker(value);
         applyPreset(await loadPreset(value));
-        chrome.storage.sync.set({ preset: value });
       },
       onModeChange: (value) => {
         lastMode = value;
         applyMode(value);
-        chrome.storage.sync.set({ mode: value });
       },
       onWidthChange: (value) => {
         lastWidth = value;
         applyWidth(value);
         if (value === "bilingual") enableBilingual();
         else disableBilingual();
-        chrome.storage.sync.set({ width: value });
       },
       onImportPreset: async (name, json) => {
         customPresets = await getCustomPresets();
@@ -675,75 +724,41 @@
         switcher.setCustomPresets(projectCustom(customPresets));
         if (lastPreset === id) {
           lastPreset = "default";
+          syncPresetMarker("default");
           switcher.setPreset("default");
           applyPreset(await loadPreset("default"));
-          chrome.storage.sync.set({ preset: "default" });
         }
       },
-      onTargetLanguageChange: async (lang) => {
-        if (!window.BaselineTranslator) return;
-        try {
-          translatorSettings = await window.BaselineTranslator
-            .saveSettings({ targetLanguage: lang });
-        } catch (e) {
-          console.warn("[Baseline] save targetLanguage failed:", e);
-        }
-      },
-      onTranslatorSettingsSave: async (next) => {
-        if (!window.BaselineTranslator) return { ok: false, error: "Translator unavailable" };
-        try {
-          translatorSettings = await window.BaselineTranslator.saveSettings(next);
-          return { ok: true };
-        } catch (e) {
-          return { ok: false, error: (e && e.message) || "Save failed" };
-        }
-      }
     });
     switcherRef = switcher;
     switcher.setColorScheme(state.mode);
 
-    window.matchMedia("(prefers-color-scheme: dark)")
-      .addEventListener("change", () => {
-        if (lastMode === "auto") applyMode("auto");
-      });
+    schemeMq = window.matchMedia("(prefers-color-scheme: dark)");
+    onSchemeChange = () => {
+      if (lastMode === "auto") applyMode("auto");
+    };
+    schemeMq.addEventListener("change", onSchemeChange);
 
-    chrome.storage.onChanged.addListener(async (changes, area) => {
-      if (area === "sync") {
-        if (changes.preset && changes.preset.newValue !== lastPreset) {
-          lastPreset = changes.preset.newValue;
-          switcher.setPreset(lastPreset);
-          applyPreset(await loadPreset(lastPreset));
-        }
-        if (changes.mode && changes.mode.newValue !== lastMode) {
-          lastMode = changes.mode.newValue;
-          switcher.setMode(lastMode);
-          applyMode(lastMode);
-        }
-        if (changes.width && changes.width.newValue !== lastWidth) {
-          lastWidth = changes.width.newValue;
-          switcher.setWidth(lastWidth);
-          applyWidth(lastWidth);
-          if (lastWidth === "bilingual") enableBilingual();
-          else disableBilingual();
-        }
-        return;
-      }
-      if (area === "local" && changes.customPresets) {
-        customPresets = Array.isArray(changes.customPresets.newValue)
-          ? changes.customPresets.newValue
-          : [];
-        switcher.setCustomPresets(projectCustom(customPresets));
-        if (lastPreset.startsWith(CUSTOM_PREFIX)) {
-          const stillExists = customPresets.some((p) => p.id === lastPreset);
-          if (!stillExists) {
-            lastPreset = "default";
-            switcher.setPreset("default");
-            chrome.storage.sync.set({ preset: "default" });
-          }
+    syncStorageListener = async (changes, area) => {
+      if (area !== "local" || !changes.customPresets) return;
+      customPresets = Array.isArray(changes.customPresets.newValue)
+        ? changes.customPresets.newValue
+        : [];
+      switcher.setCustomPresets(projectCustom(customPresets));
+      if (lastPreset.startsWith(CUSTOM_PREFIX)) {
+        const stillExists = customPresets.some((p) => p.id === lastPreset);
+        if (!stillExists) {
+          lastPreset = "default";
+          syncPresetMarker("default");
+          switcher.setPreset("default");
+          applyPreset(await loadPreset("default"));
+        } else {
+          syncPresetMarker(lastPreset);
           applyPreset(await loadPreset(lastPreset));
         }
       }
-    });
+    };
+    chrome.storage.onChanged.addListener(syncStorageListener);
 
     // ── Translation session ────────────────────────────────────────────
     if (!sessionId) {
@@ -751,11 +766,9 @@
       return;
     }
 
-    let done = false;
     let cancelled = false;
-    let port;
 
-    const statusPill = createStatusPill({
+    statusPill = createStatusPill({
       onCancel: () => {
         if (done) return;
         cancelled = true;
@@ -779,24 +792,7 @@
       return;
     }
 
-    let lastText = "";
-    // Stream-render strategy:
-    //   1. Time-throttle (not RAF) — RAF can fire 60×/sec, but each
-    //      renderTo() wipes mountEl.innerHTML, which destroys text
-    //      selection, kills hover/focus state, and re-flows headings out
-    //      from under the user. 200ms gives the eye a chance to settle
-    //      between updates without making the stream feel choppy.
-    //   2. Defer when the user has an active text selection inside
-    //      mountEl. They're trying to read or copy — re-drawing the DOM
-    //      under them would wipe the selection. We re-arm the timer so
-    //      the next chunk (or selection release) gets rendered.
-    //   3. Chain every render through `pendingRender` so two renderTo()
-    //      calls never run against mountEl concurrently (they'd race in
-    //      KaTeX/Mermaid passes and flicker the DOM). The done-handler
-    //      awaits this chain before the final render + mountNavChrome.
     const RENDER_THROTTLE_MS = 200;
-    let renderScheduled = false;
-    let renderTimer = 0;
     let pendingRender = Promise.resolve();
 
     function hasActiveSelectionIn(el) {
@@ -809,12 +805,12 @@
     }
 
     function scheduleRender() {
-      if (renderScheduled) return;
+      if (renderScheduled || handedOff) return;
       renderScheduled = true;
       renderTimer = setTimeout(() => {
         renderScheduled = false;
         renderTimer = 0;
-        if (done) return;
+        if (done || handedOff) return;
         if (hasActiveSelectionIn(mountEl)) {
           // User is selecting/reading — try again later instead of
           // yanking the DOM out from under them. The next chunk will
@@ -831,10 +827,8 @@
     }
 
     port.onMessage.addListener((msg) => {
-      if (!msg) return;
+      if (!msg || handedOff) return;
       if (msg.type === "original") {
-        // Bg ships the source markdown right after subscribe so bilingual
-        // mode can render a left column without re-fetching the file.
         originalMarkdown = msg.text || "";
         if (bilingualOn) renderOriginal();
         return;
@@ -848,27 +842,20 @@
       if (msg.type === "done") {
         done = true;
         lastText = msg.text;
+        rightMarkdown = msg.text;
         statusPill.hide();
         if (renderTimer) {
           clearTimeout(renderTimer);
           renderTimer = 0;
           renderScheduled = false;
         }
-        // Await any in-flight chunk render so the final pass + TOC mount
-        // sees a settled tree rather than racing against it.
-        const editHandler = () => {
-          const filename = buildTranslatedFilename(sourceName, targetLanguage);
-          downloadAndOpenInEditor(lastText, filename).catch((err) => {
-            console.warn("[Baseline] edit-in-editor failed:", err);
-            statusPill.setError(
-              "无法打开编辑器：" + ((err && err.message) || String(err))
-            );
-          });
-        };
         pendingRender
           .catch(() => {})
           .then(() => window.BaselineRenderer.renderTo(lastText, mountEl))
-          .then(() => mountNavChrome(mountEl, () => lastText, editHandler))
+          .then(() => {
+            mountRightChrome();
+            syncPasteRegistry();
+          })
           .catch((e) => console.warn("[Baseline] final render failed:", e));
         try { port.disconnect(); } catch (_) {}
         return;

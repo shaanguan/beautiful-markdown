@@ -32,6 +32,47 @@
   // files don't contain a single mermaid block, so we lazy-load it inside
   // runMermaid() the first time a `pre.mermaid` node appears.
 
+  // highlight.js auto-detection runs EVERY bundled grammar (~190 of them)
+  // over the whole block, which dominates render time on code-heavy docs —
+  // and the viewer re-renders on every streaming chunk, so the cost stacks.
+  // Restrict auto-detect to a common subset: ~8× cheaper, and the long tail
+  // of exotic grammars rarely improves the result for real-world code.
+  const HLJS_AUTO_SUBSET = [
+    "javascript", "typescript", "python", "bash", "shell", "json", "yaml",
+    "xml", "html", "css", "scss", "less", "markdown", "java", "kotlin",
+    "c", "cpp", "csharp", "go", "rust", "ruby", "php", "sql", "swift",
+    "objectivec", "dockerfile", "ini", "toml", "diff", "makefile", "plaintext"
+  ];
+  // Above this size, even single-grammar highlighting is costly enough to
+  // jank the tab (think a pasted minified bundle or a giant log). Fall back
+  // to plain escaped text so a huge block can't freeze rendering.
+  const HLJS_MAX_HIGHLIGHT_CHARS = 50000;
+
+  // Per-render base URL for resolving relative images (set in renderTo).
+  let renderBaseUrl = "";
+
+  const PURIFY_OPTS = {
+    ADD_ATTR: [
+      "data-href", "data-alt", "data-tag", "target",
+      "src", "alt", "title", "width", "height", "dir"
+    ],
+    ADD_TAGS: ["mark", "sub", "sup"]
+  };
+
+  const IMG_SRC_SAFE =
+    /^(?:https?:|data:|blob:|file:|chrome-extension:)/i;
+
+  function resolveImageHref(href) {
+    const raw = (href || "").trim();
+    if (!raw || IMG_SRC_SAFE.test(raw)) return raw;
+    if (!renderBaseUrl) return raw;
+    try {
+      return new URL(raw, renderBaseUrl).href;
+    } catch {
+      return raw;
+    }
+  }
+
   // Configure marked once.
   marked.use(obsidianExtensions);
   marked.use({
@@ -39,6 +80,14 @@
     breaks: false,
     pedantic: false,
     renderer: {
+      image(href, title, text) {
+        const src = escapeAttr(resolveImageHref(href));
+        const alt = escapeAttr(text || "");
+        const titleAttr = title
+          ? ` title="${escapeAttr(title)}"`
+          : "";
+        return `<img src="${src}" alt="${alt}"${titleAttr} loading="lazy" decoding="async">`;
+      },
       // Custom code block renderer: tag mermaid, run highlight.js otherwise.
       code(code, infostring) {
         const lang = (infostring || "").trim().split(/\s+/)[0];
@@ -46,7 +95,10 @@
           return `<pre class="mermaid">${escapeHTML(code)}</pre>`;
         }
         let highlighted;
-        if (lang && hljs.getLanguage(lang)) {
+        if (code.length > HLJS_MAX_HIGHLIGHT_CHARS) {
+          // Too big to highlight without risking a visible stall.
+          highlighted = escapeHTML(code);
+        } else if (lang && hljs.getLanguage(lang)) {
           try {
             highlighted = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
           } catch {
@@ -54,7 +106,7 @@
           }
         } else {
           try {
-            highlighted = hljs.highlightAuto(code).value;
+            highlighted = hljs.highlightAuto(code, HLJS_AUTO_SUBSET).value;
           } catch {
             highlighted = escapeHTML(code);
           }
@@ -72,18 +124,51 @@
   }
   function escapeAttr(s) { return escapeHTML(s).replace(/'/g, "&#39;"); }
 
+  const RTL_CHAR =
+    /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
+  function resolveImageUrls(mountEl) {
+    mountEl.querySelectorAll("img[src]").forEach((img) => {
+      const attr = img.getAttribute("src");
+      if (!attr) return;
+      const resolved = resolveImageHref(attr);
+      if (resolved && resolved !== attr) img.setAttribute("src", resolved);
+    });
+  }
+
+  function applyRtlDirection(mountEl) {
+    const blocks = mountEl.querySelectorAll(
+      "p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote, " +
+      "figcaption, .callout, .admonition"
+    );
+    for (const el of blocks) {
+      const text = el.textContent || "";
+      if (!text.trim() || !RTL_CHAR.test(text)) continue;
+      el.setAttribute("dir", "rtl");
+    }
+  }
+
   /**
    * Render markdown source into a DOM tree (already attached to `mountEl`).
    * @param {string} source markdown text
    * @param {HTMLElement} mountEl container to mount into
+   * @param {{ baseUrl?: string }} [options]
    */
-  async function renderTo(source, mountEl) {
-    const rawHtml = marked.parse(source);
-    const clean = DOMPurify.sanitize(rawHtml, {
-      ADD_ATTR: ["data-href", "data-alt", "data-tag", "target"],
-      ADD_TAGS: ["mark"]
-    });
+  async function renderTo(source, mountEl, options) {
+    const base =
+      (options && options.baseUrl) ||
+      (typeof location !== "undefined" ? location.href : "");
+    renderBaseUrl = base;
+    let rawHtml;
+    try {
+      rawHtml = marked.parse(source);
+    } finally {
+      renderBaseUrl = "";
+    }
+    const clean = DOMPurify.sanitize(rawHtml, PURIFY_OPTS);
     mountEl.innerHTML = clean;
+    resolveImageUrls(mountEl);
+    applyRtlDirection(mountEl);
 
     // KaTeX: render after DOM injection.
     try {
@@ -116,6 +201,9 @@
     // each render means stale buttons are gone for free; we only need
     // the delegated listener once.
     injectCopyButtons(mountEl);
+    injectTaskCheckboxes(mountEl);
+    // After task items are tagged — fold toggles must not sit on task rows
+    // (they would stack on the checkbox and break parent/child task layout).
     injectListFolds(mountEl);
     await runMermaid(mountEl);
 
@@ -323,30 +411,39 @@
       // Only direct nested list counts — paragraphs / inline children
       // inside the li aren't foldable.
       if (!li.querySelector(":scope > ul, :scope > ol")) continue;
+      // Task rows use the checkbox as their marker; a fold chevron stacks on
+      // top of it and breaks parent/child task hierarchy. Subtasks stay visible.
+      if (li.classList.contains("task-list-item")) continue;
       if (li.querySelector(":scope > .bsw-fold-toggle")) continue;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "bsw-fold-toggle";
       btn.setAttribute("aria-label", "Toggle fold");
       btn.setAttribute("aria-expanded", "true");
-      // The button stacks two glyphs in the same absolute slot:
-      //   .bsw-fold-dot     = our own bullet substitute (shown idle)
-      //   .bsw-fold-chevron = ▾ that rotates to ▸ when collapsed (shown
-      //                       on hover / focus / when collapsed)
-      // Both sit at inset: 0 inside the button, so opacity-crossfade
-      // produces a smooth swap with zero positional drift — the bullet
-      // and the chevron occupy the exact same pixels at all times.
+      // The button stacks two glyphs in the SAME centered slot (the stylesheet
+      // gives both inset:0 inside the button), so the swap is a pure in-place
+      // crossfade with zero drift:
+      //   .bsw-fold-dot     = a disc identical to a normal bullet (shown idle)
+      //   .bsw-fold-chevron = an SVG triangle, ▾ on hover, ▸ when collapsed.
+      // An SVG (not a "▾" text glyph) avoids font-dependent bearing offsets,
+      // so it sits dead-center and matches the dot's color/size.
       const dot = document.createElement("span");
       dot.className = "bsw-fold-dot";
-      dot.textContent = "•"; // •
       dot.setAttribute("aria-hidden", "true");
       const chev = document.createElement("span");
       chev.className = "bsw-fold-chevron";
-      chev.textContent = "▾"; // ▾
       chev.setAttribute("aria-hidden", "true");
+      chev.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+        '<path d="M6 9l6 6 6-6z"/></svg>';
       btn.appendChild(dot);
       btn.appendChild(chev);
       li.classList.add("bsw-foldable");
+      // Ordered lists keep their native 1. 2. 3. markers — the chevron is an
+      // extra affordance beside the number, not a substitute for it.
+      if (li.parentElement && li.parentElement.tagName === "OL") {
+        li.classList.add("bsw-fold-ordered");
+      }
       li.insertBefore(btn, li.firstChild);
     }
     if (!mountEl.dataset.bswFoldDelegated) {
@@ -367,6 +464,86 @@
     const willCollapse = !li.classList.contains("is-collapsed");
     li.classList.toggle("is-collapsed", willCollapse);
     btn.setAttribute("aria-expanded", willCollapse ? "false" : "true");
+  }
+
+  // ── Checkable task lists (tri-state) ────────────────────────────
+  // Three states, cycled by clicking the box:
+  //   todo      `[ ]` → empty box
+  //   done      `[x]` → box with a check
+  //   cancelled `[-]` → box with an ✕ and struck-through text
+  //
+  // marked only parses `[ ]` / `[x]` (emitting a bare checkbox <li> WITHOUT
+  // GitHub's task-list-item class), and renders `[-]` as literal text. So we:
+  //   1. promote literal "[-] …" items into cancelled task items,
+  //   2. tag every task <li> + parent list with the classes the CSS needs,
+  //   3. drive state with checked + indeterminate (indeterminate == cancelled).
+  // State lives for the render session only — a re-render (translation chunk,
+  // width change) resets to source, same as folds.
+  const TASK_STATES = ["todo", "done", "cancelled"];
+
+  function applyTaskState(li, cb, state) {
+    li.dataset.bswTask = state;
+    // Visuals are driven by LI classes + Material SVG masks (extension.css)
+    // — NOT by the checkbox's :checked, because preventDefault() in the click
+    // handler reverts the native checked value after we run.
+    li.classList.toggle("is-checked", state === "done");
+    li.classList.toggle("is-cancelled", state === "cancelled");
+    cb.checked = state === "done";
+    cb.indeterminate = state === "cancelled";
+    // aria-checked (attribute) isn't subject to the activation revert, so it
+    // keeps assistive tech in sync: mixed == cancelled.
+    cb.setAttribute("aria-checked",
+      state === "done" ? "true" : state === "cancelled" ? "mixed" : "false");
+  }
+
+  // Turn `<li>[-] text</li>` (which GFM left as plain text) into a real
+  // cancelled task item by prepending a checkbox and stripping the marker.
+  function promoteCancelledItems(mountEl) {
+    for (const li of mountEl.querySelectorAll("li")) {
+      if (li.querySelector(":scope > input[type=checkbox]")) continue;
+      const first = li.firstChild;
+      if (!first || first.nodeType !== 3) continue;
+      const m = first.nodeValue.match(/^\s*\[-\]\s+/);
+      if (!m) continue;
+      first.nodeValue = first.nodeValue.slice(m[0].length);
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      li.insertBefore(cb, li.firstChild);
+      li.dataset.bswTask = "cancelled";
+    }
+  }
+
+  function injectTaskCheckboxes(mountEl) {
+    promoteCancelledItems(mountEl);
+
+    const boxes = mountEl.querySelectorAll('li > input[type="checkbox"]');
+    if (!boxes.length) return;
+
+    for (const cb of boxes) {
+      const li = cb.parentElement;
+      if (!li) continue;
+
+      li.classList.add("task-list-item");
+      if (li.parentElement) li.parentElement.classList.add("contains-task-list");
+
+      cb.disabled = false;
+      const initial = li.dataset.bswTask || (cb.checked ? "done" : "todo");
+      applyTaskState(li, cb, initial);
+
+      // Avoid stacking listeners on re-renders.
+      if (cb.dataset.bswTaskBound) continue;
+      cb.dataset.bswTaskBound = "1";
+
+      cb.addEventListener("click", (e) => {
+        // We own the state machine — block the native two-state toggle and
+        // any bubbling to the fold toggle / surrounding links.
+        e.preventDefault();
+        e.stopPropagation();
+        const cur = li.dataset.bswTask || "todo";
+        const next = TASK_STATES[(TASK_STATES.indexOf(cur) + 1) % TASK_STATES.length];
+        applyTaskState(li, cb, next);
+      });
+    }
   }
 
   root.BaselineRenderer = { renderTo, runMermaid };

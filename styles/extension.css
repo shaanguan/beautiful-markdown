@@ -88,16 +88,30 @@ body.theme-dark {
 html, body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--background-primary, #fff);
   color: var(--text-normal, #222);
   font-family: var(--font-text, var(--font-text-theme, "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif));
   font-size: var(--font-text-size, 16px);
   line-height: var(--line-height-normal, 1.6);
-  min-height: 100vh;
 }
 
+/* Single-column reading: body stays fixed; the app shell scrolls. */
 .app-container {
-  min-height: 100vh;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* Two-pane: pin the leaf to the viewport; each .view-content scrolls.
+   Do not thread height through .app-container flex — that breaks when
+   single-column scroll uses % heights on ancestors. */
+body.bsw-twopane-active .app-container {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
 .markdown-reading-view {
@@ -159,8 +173,8 @@ body.bsw-twopane-active { overflow: hidden; }
 body.bsw-twopane-active .workspace-leaf-content {
   display: flex;
   flex-direction: row;
-  height: 100vh;
   align-items: stretch;
+  height: 100vh;
 }
 body.bsw-twopane-active .workspace-leaf-content > .view-content {
   flex: 1 1 0;
@@ -184,26 +198,19 @@ body.bsw-twopane-active .markdown-preview-sizer.markdown-preview-section {
   max-width: 100% !important;
 }
 
-/* Suppress TOC chrome — fixed-position rail collides with the two-column
-   flex layout, and the progress bar overlaps the column boundary. */
-body.bsw-twopane-active #baseline-toc,
-body.bsw-twopane-active .bsw-toc-toggle,
-body.bsw-twopane-active #baseline-progress-bar {
-  display: none !important;
+/* Each column in two-pane mode owns its own TOC rail — positioned
+   inside .view-content (position:relative) rather than the viewport. */
+body.bsw-twopane-active .view-content .bsw-column-toc {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(360px, 42vw);
+  height: 100%;
 }
-/* …but the .bsw-with-toc / :not(.bsw-toc-collapsed) classes can still be
-   on the active .view-content (if the user opened the TOC before
-   switching to two-pane). Hiding only the panel itself isn't enough —
-   the content-wrap's `padding-right: 360px` would crush the column.
-   Zero out that reservation, and snap the doc-tools row back to the
-   column edge so edit / copy stay reachable. */
-body.bsw-twopane-active .view-content.bsw-with-toc > .bsw-content-wrap,
 body.bsw-twopane-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) > .bsw-content-wrap {
-  padding-right: 0 !important;
+  padding-right: min(360px, 42vw) !important;
 }
 body.bsw-twopane-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-doc-tools {
-  /* In twopane, align-self handles horizontal placement — clear the
-     legacy 372px push so it doesn't fight the flex-end alignment. */
   right: auto !important;
 }
 
@@ -211,22 +218,24 @@ body.bsw-twopane-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-
    user has picked a file. Centred dashed-border picker that visually
    matches the "Import preset" affordance in the settings panel, plus a
    one-line note about the image/wikilink limitation. */
+/* Empty column / blank tab — system sans, muted gray, darker on hover (not accent). */
+.bsw-open-empty,
 .bsw-split-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: min(72vh, 100%);
   gap: 14px;
   padding: 32px 24px;
-  color: var(--bsw-text-muted, #6e7681);
   text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-muted, #6e7681);
 }
-/* Adopt the .bsw-import-button look (dashed border, ghost background)
-   inside the empty container. `.bsw-import-button` rules are scoped to
-   #baseline-switcher; we re-state the bare visual contract here so it
-   also paints inside the split column where #baseline-switcher isn't
-   an ancestor. */
+/* `.bsw-import-button` in #baseline-switcher keeps accent hover; empty pages only. */
+.bsw-open-empty .bsw-import-button.bsw-split-pick,
 .bsw-split-empty .bsw-import-button.bsw-split-pick {
   display: inline-flex;
   align-items: center;
@@ -238,23 +247,83 @@ body.bsw-twopane-active .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-
   border: 1px dashed var(--background-modifier-border, rgba(0, 0, 0, 0.18));
   border-radius: 8px;
   background: transparent;
-  color: var(--bsw-text-muted, #6e7681);
-  font: inherit;
-  font-size: 13px;
+  color: var(--text-muted, #6e7681);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.bsw-split-empty .bsw-import-button.bsw-split-pick:hover {
-  color: var(--interactive-accent, #2c84db);
-  border-color: var(--interactive-accent, #2c84db);
-  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.04));
+.bsw-open-empty .bsw-import-button.bsw-split-pick svg,
+.bsw-split-empty .bsw-import-button.bsw-split-pick svg {
+  flex: none;
+  fill: currentColor;
 }
-.bsw-split-empty-note {
+.bsw-open-empty .bsw-import-button.bsw-split-pick:hover,
+.bsw-split-empty .bsw-import-button.bsw-split-pick:hover {
+  color: var(--text-normal, #1f2328);
+  border-color: var(--background-modifier-border-hover, rgba(0, 0, 0, 0.22));
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+}
+body.theme-dark .bsw-open-empty .bsw-import-button.bsw-split-pick:hover,
+body.theme-dark .bsw-split-empty .bsw-import-button.bsw-split-pick:hover {
+  color: var(--text-normal, #e6edf3);
+  border-color: var(--background-modifier-border-hover, rgba(255, 255, 255, 0.2));
+  background: var(--background-modifier-hover, rgba(255, 255, 255, 0.06));
+}
+.bsw-open-empty .bsw-split-empty-note,
+.bsw-open-empty .bsw-open-paste-hint {
   margin: 0;
-  font-size: 12px;
-  opacity: 0.75;
-  max-width: 280px;
+  font-family: inherit;
+  font-size: 13px;
   line-height: 1.5;
+  color: var(--text-muted, #6e7681);
+  opacity: 1;
+  max-width: 360px;
+}
+
+/* Plugin blank tab with no document yet — no reading chrome at all. */
+body.bsw-open-page.bsw-open-chrome-hidden #baseline-switcher,
+body.bsw-open-page.bsw-open-chrome-hidden .bsw-doc-tools,
+body.bsw-open-page.bsw-open-chrome-hidden .bsw-column-toc,
+body.bsw-open-page.bsw-open-chrome-hidden #baseline-progress {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Blank tab + split empty column: same centred empty affordance. */
+.bsw-open-page .bsw-open-empty,
+body.bsw-twopane-active .markdown-preview-view .bsw-open-empty {
+  min-height: 78vh;
+}
+/* Open tab + split empty column: click anywhere in the column to pick a file. */
+.bsw-open-page .view-content.bsw-open-empty-clickable,
+body.bsw-twopane-active .view-content.bsw-open-empty-clickable {
+  cursor: pointer;
+  min-height: 78vh;
+}
+.bsw-open-page .view-content.bsw-open-empty-clickable .markdown-reading-view,
+.bsw-open-page .view-content.bsw-open-empty-clickable .markdown-preview-view,
+body.bsw-twopane-active .view-content.bsw-open-empty-clickable .markdown-reading-view,
+body.bsw-twopane-active .view-content.bsw-open-empty-clickable .markdown-preview-view {
+  min-height: 78vh;
+}
+.bsw-open-paste-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 1px;
+  font-family: var(--font-monospace, ui-monospace, SFMono-Regular, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted, #6e7681);
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.15));
+  border-radius: 4px;
+}
+body.theme-dark .bsw-open-paste-hint kbd {
+  color: var(--text-muted, #9aa3ad);
 }
 
 /* In two-pane mode (bilingual OR split), each column owns its own
@@ -322,6 +391,24 @@ mark {
   color: var(--text-highlight-fg, inherit);
   padding: 0 0.1em;
   border-radius: 2px;
+}
+
+.markdown-rendered sub,
+.markdown-rendered sup {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+.markdown-rendered sup {
+  top: -0.4em;
+}
+.markdown-rendered sub {
+  bottom: -0.15em;
+}
+
+.markdown-rendered [dir="rtl"] {
+  text-align: right;
 }
 
 /* Fallback code block styling if hljs theme variables don't ship in Baseline.
@@ -402,72 +489,92 @@ body.theme-dark .bsw-code-copy.is-copied:hover {
   background: var(--background-secondary, #2a2a2a);
 }
 
-/* ── List-item fold chevrons ──────────────────────────────────────
-   Injected by src/renderer.js → injectListFolds for every <li> with
-   a direct nested <ul>/<ol>.
-
-   Design choice: we draw OUR OWN bullet substitute (•) instead of
-   relying on the browser's ::marker. Otherwise the marker glyph and
-   our chevron live in different rendering pipelines (different fonts,
-   different metrics, different positions), and any hover-driven swap
-   between them flickers / shifts by a couple of pixels. By stacking
-   both glyphs inside a single absolutely-positioned button at the
-   same inset:0, the bullet→chevron transition becomes a pure opacity
-   crossfade — zero positional drift, smooth fade.
-
-   Three visual states:
-     1. expanded, idle     → •  (our dot, full opacity)
-     2. expanded, hovered  → ▾  (chevron crossfades in, dot fades out)
-     3. collapsed          → ▸  (chevron stays, rotated -90°)
-
-   Non-foldable sibling <li> still use the browser's bullet, so the
-   visual offset between our drawn dot and the native bullet may be
-   a hair off — but it's static (no animation), and aligned across
-   all foldable rows. */
+/* ── Unified list bullets + fold chevrons ─────────────────────────
+   We draw OUR OWN disc for every unordered-list item in the reading
+   view (ordered lists keep their numbers; task items keep their box),
+   for two reasons:
+     1. A foldable row must host a fold chevron in the bullet slot, so it
+        can't use the browser's ::marker. Drawing every ul bullet the same
+        way makes foldable and ordinary rows pixel-identical.
+     2. The chevron then lives in the EXACT same slot as the dot, so the
+        idle-dot ⇄ hover-chevron swap has zero positional drift.
+   Geometry is shared through three custom props so the dot (::before),
+   the foldable dot, and the chevron all land on one center.
+   NOTE: <button> resets font-size to the UA default (~13px), so we force
+   `font: inherit` on the toggle — otherwise every em below (size, offsets)
+   would resolve against the wrong font and the dot would be small / high. */
+.markdown-rendered li {
+  --bsw-bullet-cx: -0.9em;     /* horizontal center of the marker slot   */
+  --bsw-bullet-cy: 0.8em;      /* vertical center == first-line middle    */
+  --bsw-bullet-size: 0.36em;   /* matches the browser's default disc      */
+}
+.markdown-rendered ul > li:not(.task-list-item) {
+  list-style: none;
+  position: relative;
+}
+/* Foldable rows always need a positioning context for the toggle — incl.
+   ordered-list items, which keep their number (so no ::before disc). */
 .markdown-rendered li.bsw-foldable {
   position: relative;
-  /* Always: kill the native marker so our drawn glyphs own the slot. */
-  list-style: none;
 }
+/* An ordered foldable item keeps its "1." marker, so suppress the fold dot
+   (the chevron still appears on hover/collapse just left of the number). */
+.markdown-rendered ol > li.bsw-foldable > .bsw-fold-toggle > .bsw-fold-dot {
+  display: none;
+}
+.markdown-rendered ul > li:not(.task-list-item)::before {
+  content: "";
+  position: absolute;
+  left: var(--bsw-bullet-cx);
+  top: var(--bsw-bullet-cy);
+  transform: translate(-50%, -50%);
+  width: var(--bsw-bullet-size);
+  height: var(--bsw-bullet-size);
+  border-radius: 50%;
+  background: currentColor;
+}
+/* Expanded idle: same li::before disc as siblings; hide it when chevron takes over. */
+.markdown-rendered ul > li.bsw-foldable::before {
+  transition: opacity 0.12s ease;
+}
+.markdown-rendered ul > li.bsw-foldable.is-collapsed::before,
+.markdown-rendered ul > li.bsw-foldable:hover::before,
+.markdown-rendered ul > li.bsw-foldable:has(> .bsw-fold-toggle:focus-visible)::before {
+  opacity: 0;
+}
+
+/* Foldable rows: a button centered on the same slot stacks the dot (idle)
+   and the chevron (hover / focus / collapsed); they crossfade in place. */
 .markdown-rendered .bsw-fold-toggle {
   position: absolute;
-  /* Anchor the button center at roughly where the native disc bullet
-     would sit (≈ -0.7em from li content edge for the default ul
-     padding-inline-start: 40px). Width 1.1em → left:-1.35em centers
-     the glyph at -0.8em. Top is fine-tuned so the dot's optical
-     center lands on the first line's x-height. */
-  left: -1.35em;
-  top: 0;
-  width: 1.1em;
-  height: 1.6em;
+  left: var(--bsw-bullet-cx);
+  top: var(--bsw-bullet-cy);
+  transform: translate(-50%, -50%);
+  width: 1.5em;
+  height: 1.5em;
   padding: 0;
   border: 0;
   background: transparent;
+  font: inherit; /* critical — align em units with the list, not the UA */
+  color: inherit;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: 4px;
   user-select: none;
-  /* Background fades in on hover for a soft hit-target chip; color
-     transitions live on the glyphs themselves. */
   transition: background 0.12s ease;
 }
 .markdown-rendered .bsw-fold-toggle:hover {
-  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.05));
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.06));
 }
 body.theme-dark .markdown-rendered .bsw-fold-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07);
 }
 .markdown-rendered .bsw-fold-toggle:focus-visible {
   outline: 2px solid var(--interactive-accent, #2c84db);
   outline-offset: 1px;
 }
-
-/* The two glyphs occupy the EXACT same slot inside the button, so
-   crossfading them produces no positional drift. line-height:1 +
-   inline-flex center means the glyph's optical center stays put
-   regardless of the font's actual ascent/descent. */
 .markdown-rendered .bsw-fold-dot,
 .markdown-rendered .bsw-fold-chevron {
   position: absolute;
@@ -475,52 +582,142 @@ body.theme-dark .markdown-rendered .bsw-fold-toggle:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
   pointer-events: none; /* clicks pass through to the button */
-  transition: opacity 0.15s ease, color 0.15s ease, transform 0.18s ease;
+  color: currentColor;
+  transition: opacity 0.12s ease, transform 0.18s ease;
 }
-.markdown-rendered .bsw-fold-dot {
-  /* Match Obsidian/Baseline's bullet vibe: muted text color, slightly
-     larger than the chevron so it has comparable visual weight to the
-     native disc bullet on neighbouring (non-foldable) rows. */
-  color: var(--text-muted, #6e7681);
-  font-size: 1.1em;
-  opacity: 1;
+/* Unordered foldables use li::before for the idle bullet — dot span stays for OL/task. */
+.markdown-rendered ul > li.bsw-foldable > .bsw-fold-toggle > .bsw-fold-dot {
+  opacity: 0;
 }
 .markdown-rendered .bsw-fold-chevron {
-  color: var(--text-faint, #9aa0a6);
-  font-size: 0.85em;
   opacity: 0;
 }
-/* State 2: hover → dot fades out, chevron fades in. */
-.markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-dot,
-.markdown-rendered .bsw-fold-toggle:focus-visible > .bsw-fold-dot {
-  opacity: 0;
+.markdown-rendered .bsw-fold-chevron svg {
+  width: 0.8em;
+  height: 0.8em;
+  display: block;
 }
+/* A foldable item that's ALSO a task item already shows a checkbox as its
+   marker — hide the redundant fold dot so we don't paint two markers. The
+   chevron still fades in on hover/collapse so the row stays foldable. */
+.markdown-rendered li.task-list-item > .bsw-fold-toggle > .bsw-fold-dot {
+  display: none;
+}
+/* Hover/focus/collapsed → li bullet out, chevron (▾/▸) in, same slot. */
 .markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-chevron,
 .markdown-rendered .bsw-fold-toggle:focus-visible > .bsw-fold-chevron {
   opacity: 1;
 }
-.markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-chevron {
-  color: var(--text-normal, #1f2328);
-}
-body.theme-dark .markdown-rendered li.bsw-foldable:hover > .bsw-fold-toggle > .bsw-fold-chevron {
-  color: var(--text-normal, #dcddde);
-}
-/* State 3: collapsed → chevron stays (rotated -90°), dot hidden.
-   Hides the nested list via display:none — DOM stays intact so a
-   later expand just toggles the class back, no re-render needed. */
-.markdown-rendered li.bsw-foldable.is-collapsed > .bsw-fold-toggle > .bsw-fold-dot {
-  opacity: 0;
-}
 .markdown-rendered li.bsw-foldable.is-collapsed > .bsw-fold-toggle > .bsw-fold-chevron {
   opacity: 1;
   transform: rotate(-90deg);
-  color: var(--text-muted, #6e7681);
 }
 .markdown-rendered li.bsw-foldable.is-collapsed > ul,
 .markdown-rendered li.bsw-foldable.is-collapsed > ol {
   display: none;
+}
+
+/* Ordered-list folds: the native 1. 2. 3. marker ALWAYS stays visible.
+   The chevron is an extra control in the gutter LEFT of the number — it
+   fades in on hover / focus / collapse but never replaces the ordinal.
+   (Unordered folds still swap dot ⇄ chevron in the bullet slot above.) */
+.markdown-rendered ol > li.bsw-fold-ordered {
+  position: relative;
+  /* Nested ol items inside a ul inherit --bsw-bullet-cx from the ul row;
+     reset so the toggle doesn't land on top of the number. */
+  --bsw-bullet-cx: initial;
+  --bsw-fold-cx: -2.35em; /* left of the ordinal marker box */
+  --bsw-fold-cy: 0.8em;
+}
+.markdown-rendered ol > li.bsw-fold-ordered > .bsw-fold-toggle {
+  left: var(--bsw-fold-cx);
+  top: var(--bsw-fold-cy);
+}
+.markdown-rendered ol > li.bsw-fold-ordered > .bsw-fold-toggle > .bsw-fold-dot {
+  display: none;
+}
+/* Ordered: never run the dot-opacity crossfade — there is no fold dot. */
+.markdown-rendered ol > li.bsw-fold-ordered:hover > .bsw-fold-toggle > .bsw-fold-dot,
+.markdown-rendered ol > li.bsw-fold-ordered.is-collapsed > .bsw-fold-toggle > .bsw-fold-dot {
+  opacity: 0;
+}
+
+/* Task lists — Content First: make - [ ] items interactive and beautiful
+   Session-only state (resets on re-render, same as folds). Three Material
+   icons (empty box / check / minus) are tinted via mask + background-color. */
+.markdown-rendered ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+.markdown-rendered .task-list-item {
+  list-style: none;
+  position: relative;
+  padding-left: 1.65em;
+  --bsw-task-icon-todo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%20-960%20960%20960%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M200-120q-33%200-56.5-23.5T120-200v-560q0-33%2023.5-56.5T200-840h560q33%200%2056.5%2023.5T840-760v560q0%2033-23.5%2056.5T760-120H200Zm0-80h560v-560H200v560Z%22%2F%3E%3C%2Fsvg%3E");
+  --bsw-task-icon-done: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%20-960%20960%20960%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22m424-312%20282-282-56-56-226%20226-114-114-56%2056%20170%20170ZM200-120q-33%200-56.5-23.5T120-200v-560q0-33%2023.5-56.5T200-840h560q33%200%2056.5%2023.5T840-760v560q0%2033-23.5%2056.5T760-120H200Z%22%2F%3E%3C%2Fsvg%3E");
+  --bsw-task-icon-cancelled: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%20-960%20960%20960%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M280-440h400v-80H280v80Zm-80%20320q-33%200-56.5-23.5T120-200v-560q0-33%2023.5-56.5T200-840h560q33%200%2056.5%2023.5T840-760v560q0%2033-23.5%2056.5T760-120H200Z%22%2F%3E%3C%2Fsvg%3E");
+}
+.markdown-rendered .task-list-item input[type="checkbox"] {
+  position: absolute;
+  left: 0;
+  top: 0.12em;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  color: var(--text-muted, #8a8f98);
+  background-color: currentColor;
+  /* Replace Baseline's checkmark-shaped mask with our Material icons. */
+  -webkit-mask: var(--bsw-task-icon-todo) no-repeat center / contain;
+  mask: var(--bsw-task-icon-todo) no-repeat center / contain;
+  transition: color 0.1s ease;
+}
+.markdown-rendered .task-list-item input[type="checkbox"]:hover {
+  color: var(--interactive-accent, #2c84db);
+}
+/* State is driven by classes on the <li>, NOT the :checked / :indeterminate
+   pseudo-classes. The click handler calls preventDefault() to own the tri-
+   state cycle, and per the HTML spec that REVERTS the native checked value
+   after the handler — so a :checked-based style would flip back. Keying off
+   .is-checked / .is-cancelled is immune to that. */
+.markdown-rendered .task-list-item.is-checked input[type="checkbox"] {
+  color: var(--interactive-accent, #2c84db);
+  -webkit-mask-image: var(--bsw-task-icon-done);
+  mask-image: var(--bsw-task-icon-done);
+}
+.markdown-rendered .task-list-item.is-checked input[type="checkbox"]:hover {
+  color: var(--interactive-accent, #2c84db);
+}
+.markdown-rendered .task-list-item.is-cancelled input[type="checkbox"] {
+  color: var(--text-muted, #8a8f98);
+  -webkit-mask-image: var(--bsw-task-icon-cancelled);
+  mask-image: var(--bsw-task-icon-cancelled);
+}
+/* Done keeps its text as-is (just the check); only a cancelled item is
+   struck through and muted. Nested subtasks keep their own state. */
+.markdown-rendered .task-list-item.is-cancelled {
+  color: var(--text-muted, #6e7681);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+}
+.markdown-rendered .task-list-item.is-cancelled .task-list-item {
+  color: var(--text-normal, #1f2328);
+  text-decoration: none;
+}
+body.theme-dark .markdown-rendered .task-list-item.is-cancelled .task-list-item {
+  color: var(--text-normal, #dcddde);
+}
+/* Nested task lists live inside the parent <li>; restore indent so subtasks
+   read as children of the parent row, not siblings at the same margin. */
+.markdown-rendered .task-list-item > ul.contains-task-list {
+  margin: 0.2em 0 0;
+  padding-left: 1.65em;
 }
 
 /* Mermaid container alignment */
@@ -530,20 +727,83 @@ pre.mermaid {
   padding: 16px 0;
 }
 
-/* Tables */
-.markdown-rendered table {
-  border-collapse: collapse;
-  margin: 1em 0;
+/* Tables — beat Baseline theme.css which sets
+   `table>tbody>tr:not(:last-child)>td { border-bottom: none }` at higher
+   specificity than bare `.markdown-rendered`. Use the preview wrapper + row
+   dividers instead of zebra banding. */
+div.markdown-preview-view.markdown-rendered table {
+  --bsw-table-line: var(--background-modifier-border, rgba(0, 0, 0, 0.14));
+  box-sizing: border-box;
   width: 100%;
+  margin: 1em 0;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--bsw-table-line);
+  border-radius: 8px;
+  overflow: hidden;
 }
-.markdown-rendered th, .markdown-rendered td {
-  border: 1px solid var(--background-modifier-border, #ddd);
-  padding: 0.5em 0.75em;
+div.markdown-preview-view.markdown-rendered table th,
+div.markdown-preview-view.markdown-rendered table td {
+  padding: 0.55em 0.8em;
   text-align: left;
+  vertical-align: top;
+  border-top: none;
+  border-left: none;
+  border-right: 1px solid var(--bsw-table-line);
+  border-bottom: none;
+  border-radius: 0 !important;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
-.markdown-rendered th {
-  background: var(--background-secondary, #f5f5f5);
+div.markdown-preview-view.markdown-rendered table th:last-child,
+div.markdown-preview-view.markdown-rendered table td:last-child {
+  border-right: 0;
+}
+div.markdown-preview-view.markdown-rendered table > thead > tr > th {
+  border-bottom: 1px solid var(--bsw-table-line);
+  background: color-mix(
+    in srgb,
+    var(--background-secondary, #f6f8fa) 42%,
+    transparent
+  );
   font-weight: var(--font-bold, 600);
+  white-space: nowrap;
+}
+/* Override theme `tr:not(:last-child)>td { border-bottom: none }`. */
+div.markdown-preview-view.markdown-rendered table > tbody > tr > td {
+  border-bottom: 1px solid var(--bsw-table-line);
+  white-space: normal;
+}
+div.markdown-preview-view.markdown-rendered table > tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+div.markdown-preview-view.markdown-rendered table tbody tr {
+  background: transparent;
+}
+div.markdown-preview-view.markdown-rendered table tbody tr:hover {
+  background: color-mix(
+    in srgb,
+    var(--background-modifier-hover, rgba(0, 0, 0, 0.04)) 35%,
+    transparent
+  );
+}
+body.theme-dark div.markdown-preview-view.markdown-rendered table {
+  --bsw-table-line: var(--background-modifier-border, rgba(255, 255, 255, 0.1));
+}
+body.theme-dark div.markdown-preview-view.markdown-rendered table > thead > tr > th {
+  background: color-mix(
+    in srgb,
+    var(--background-secondary, #2a2d35) 38%,
+    transparent
+  );
+}
+body.theme-dark div.markdown-preview-view.markdown-rendered table tbody tr:hover {
+  background: color-mix(
+    in srgb,
+    var(--background-modifier-hover, rgba(255, 255, 255, 0.05)) 30%,
+    transparent
+  );
 }
 
 /* Blockquote
@@ -705,7 +965,22 @@ pre.mermaid {
   color: var(--bsw-text);
 }
 #baseline-switcher-panel[hidden],
-#baseline-translate-panel[hidden] { display: none; }
+#baseline-translate-panel[hidden],
+#baseline-translate-toggle[hidden],
+#baseline-switcher .baseline-toggle-divider[hidden] {
+  display: none !important;
+}
+
+/* 分栏视图：只对照阅读，隐藏翻译入口（translate 按钮的 display:flex
+   会压过 [hidden]，故用 body 类 + !important 保证整块入口不可见）。 */
+body.bsw-split-active #baseline-translate-toggle,
+body.bsw-split-active #baseline-translate-panel,
+body.bsw-split-active #baseline-switcher .baseline-toggle-divider,
+#baseline-switcher.bsw-translate-ui-hidden #baseline-translate-toggle,
+#baseline-switcher.bsw-translate-ui-hidden #baseline-translate-panel,
+#baseline-switcher.bsw-translate-ui-hidden .baseline-toggle-divider {
+  display: none !important;
+}
 
 /* Restore UA's [hidden] behavior for inner blocks that have an explicit
    display rule. Without this, e.g. `.bsw-import { display: flex }` beats
@@ -774,10 +1049,14 @@ pre.mermaid {
   padding: 4px;
   background: var(--bsw-segment-bg);
   border-radius: 10px;
-  margin: 0 6px;
+  margin: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 #baseline-switcher .bsw-mode-item {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   /* Explicit inline-flex centering so presets that reset `button` to
      text-align:left (Adwaita / minimal both do) can't push the label
      to the edge. align/justify guarantees both axes. */
@@ -785,7 +1064,7 @@ pre.mermaid {
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 9px 12px;
+  padding: 9px 8px;
   border: none;
   background: transparent;
   color: var(--bsw-text-muted);
@@ -1399,8 +1678,7 @@ pre.mermaid {
 .markdown-rendered h4,
 .markdown-rendered h5,
 .markdown-rendered h6 {
-  /* Scroll-margin so anchor jumps don't tuck the heading under
-     the progress bar / browser chrome. */
+  /* Scroll-margin so anchor jumps don't tuck the heading under browser chrome. */
   scroll-margin-top: 24px;
 }
 
@@ -1491,7 +1769,7 @@ pre.mermaid {
   padding-right: 360px;
 }
 
-#baseline-toc {
+.bsw-column-toc {
   position: fixed;
   top: 0;
   right: 0;
@@ -1509,7 +1787,7 @@ pre.mermaid {
   transition: transform 0.22s ease;
   pointer-events: none;
 }
-.view-content.bsw-with-toc:not(.bsw-toc-collapsed) #baseline-toc {
+.view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-column-toc {
   transform: translateX(0);
   pointer-events: auto;
 }
@@ -1592,9 +1870,170 @@ body.theme-dark .bsw-doc-tool:hover {
   transition-delay: 1s;
 }
 
+/* Dedicated edit tab (edit.html) — same reading column width as preview. */
+html.bsw-edit-root,
+html.bsw-edit-root body.bsw-edit-page {
+  height: 100%;
+}
+/* Page chrome: fixed background; only .bsw-edit-scroll moves. */
+.bsw-edit-page {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background-secondary, #f6f8fa);
+  color: var(--text-normal, #1f2328);
+  font-family: var(--font-text-theme, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+.bsw-edit-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.bsw-edit-shell {
+  box-sizing: border-box;
+  max-width: var(--file-line-width, 720px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 5vw, 56px) 48px;
+  display: flex;
+  flex-direction: column;
+}
+.bsw-edit-header {
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -4px;
+  padding: 20px 4px 14px;
+  background: var(--background-secondary, #f6f8fa);
+  border-bottom: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.08));
+}
+@supports (backdrop-filter: blur(8px)) {
+  .bsw-edit-header {
+    background: color-mix(in srgb, var(--background-secondary, #f6f8fa) 88%, transparent);
+    backdrop-filter: blur(10px);
+  }
+}
+.bsw-edit-heading {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+  color: var(--text-muted, #6e7681);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bsw-edit-main {
+  position: relative;
+  flex: 1 1 auto;
+  padding-top: 8px;
+}
+.bsw-edit-scroll-mirror {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+.bsw-edit-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+/* Header icon buttons — undo / redo / save. */
+.bsw-edit-tool {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-faint, #9aa0a6);
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease, opacity 0.12s ease;
+}
+.bsw-edit-tool:hover:not(:disabled) {
+  background: var(--background-modifier-hover, rgba(0, 0, 0, 0.06));
+  color: var(--text-normal, #1f2328);
+}
+.bsw-edit-tool svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+.bsw-edit-tool:focus-visible {
+  outline: 2px solid var(--interactive-accent, #2c84db);
+  outline-offset: 2px;
+}
+.bsw-edit-tool:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+.bsw-edit-save.is-dirty {
+  color: var(--interactive-accent, #2c84db);
+}
+.bsw-edit-save.is-dirty:hover:not(:disabled) {
+  background: rgba(44, 132, 219, 0.12);
+}
+.bsw-edit-input {
+  display: block;
+  width: 100%;
+  min-height: calc(100vh - 96px);
+  margin: 0;
+  padding: 4px 2px 32px;
+  border: 0;
+  resize: none;
+  overflow: hidden;
+  box-sizing: border-box;
+  field-sizing: content;
+  font-family: var(--font-monospace-theme, ui-monospace, SFMono-Regular, Menlo,
+    Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: var(--font-text-size, 15px);
+  line-height: var(--line-height-normal, 1.65);
+  letter-spacing: 0.01em;
+  tab-size: 2;
+  color: var(--text-normal, #1f2328);
+  background: transparent;
+  caret-color: var(--interactive-accent, #2c84db);
+}
+@supports not (field-sizing: content) {
+  .bsw-edit-input {
+    overflow: hidden;
+  }
+}
+.bsw-edit-input::placeholder {
+  color: var(--text-faint, #9aa0a6);
+}
+.bsw-edit-input:focus {
+  outline: none;
+}
+.bsw-edit-page.theme-dark .bsw-edit-header {
+  border-bottom-color: var(--background-modifier-border, rgba(255, 255, 255, 0.08));
+}
+
 /* Inherits the page background — no border, no panel fill — so the TOC
    reads as one surface with the article. */
-#baseline-toc .bsw-toc-panel {
+.bsw-column-toc .bsw-toc-panel {
   width: 360px;
   height: 100%;
   display: flex;
@@ -1603,14 +2042,14 @@ body.theme-dark .bsw-doc-tool:hover {
   padding: 16px 12px 16px 24px;
 }
 
-#baseline-toc .bsw-toc-header {
+.bsw-column-toc .bsw-toc-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 4px 4px 10px 4px;
   flex-shrink: 0;
 }
-#baseline-toc .bsw-toc-title {
+.bsw-column-toc .bsw-toc-title {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1619,7 +2058,7 @@ body.theme-dark .bsw-doc-tool:hover {
   user-select: none;
 }
 
-#baseline-toc .bsw-toc-list {
+.bsw-column-toc .bsw-toc-list {
   display: flex;
   flex-direction: column;
   /* Small per-item gap so the row backgrounds don't blur into each other
@@ -1636,7 +2075,7 @@ body.theme-dark .bsw-doc-tool:hover {
    Level-specific font-size / weight / color are set in the level rules
    below so the visual hierarchy reads at a glance: bigger + bolder +
    darker = closer to the page's outline root. */
-#baseline-toc .bsw-toc-item {
+.bsw-column-toc .bsw-toc-item {
   display: block;
   /* Bug fix: line-height 1.4 + padding 6px was clipping CJK descenders
      because the box was barely tall enough to contain the rendered glyph
@@ -1660,26 +2099,26 @@ body.theme-dark .bsw-doc-tool:hover {
    without reading them. Fallbacks deliberately set explicit hex
    instead of trusting --text-muted / --text-faint, which some themes
    leave too light to read against a white panel. */
-#baseline-toc .bsw-toc-item[data-level="1"] {
+.bsw-column-toc .bsw-toc-item[data-level="1"] {
   padding-left: 10px;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-normal, #16191d);
   letter-spacing: -0.005em;
 }
-#baseline-toc .bsw-toc-item[data-level="2"] {
+.bsw-column-toc .bsw-toc-item[data-level="2"] {
   padding-left: 22px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-normal, #2f343a);
 }
-#baseline-toc .bsw-toc-item[data-level="3"] {
+.bsw-column-toc .bsw-toc-item[data-level="3"] {
   padding-left: 36px;
   font-size: 12.5px;
   font-weight: 400;
   color: var(--text-muted, #5a6168);
 }
-#baseline-toc .bsw-toc-item[data-level="4"] {
+.bsw-column-toc .bsw-toc-item[data-level="4"] {
   padding-left: 50px;
   font-size: 12px;
   font-weight: 400;
@@ -1689,30 +2128,30 @@ body.theme-dark .bsw-doc-tool:hover {
 /* Hover lifts the item to the darkest color tier regardless of level,
    so deeply-nested items become legible the moment the cursor reaches
    them. */
-#baseline-toc .bsw-toc-item:hover {
+.bsw-column-toc .bsw-toc-item:hover {
   background: var(--background-modifier-hover, rgba(127, 127, 127, 0.08));
   color: var(--text-normal, #16191d);
 }
 
 /* Dark theme — the same gradient, but mapped to lighter shades so each
    tier still has visible contrast against the dark panel background. */
-body.theme-dark #baseline-toc .bsw-toc-item[data-level="1"] {
+body.theme-dark .bsw-column-toc .bsw-toc-item[data-level="1"] {
   color: var(--text-normal, #f0f4f8);
 }
-body.theme-dark #baseline-toc .bsw-toc-item[data-level="2"] {
+body.theme-dark .bsw-column-toc .bsw-toc-item[data-level="2"] {
   color: var(--text-normal, #d6dce3);
 }
-body.theme-dark #baseline-toc .bsw-toc-item[data-level="3"] {
+body.theme-dark .bsw-column-toc .bsw-toc-item[data-level="3"] {
   color: var(--text-muted, #a6adb5);
 }
-body.theme-dark #baseline-toc .bsw-toc-item[data-level="4"] {
+body.theme-dark .bsw-column-toc .bsw-toc-item[data-level="4"] {
   color: var(--text-faint, #828990);
 }
-body.theme-dark #baseline-toc .bsw-toc-item:hover {
+body.theme-dark .bsw-column-toc .bsw-toc-item:hover {
   color: var(--text-normal, #f0f4f8);
 }
 
-#baseline-toc .bsw-toc-item.is-active {
+.bsw-column-toc .bsw-toc-item.is-active {
   /* User spec: 选中只显示文字颜色变化，不要左边竖线 / 行背景填充。
      Active is now purely user-click-driven (no scroll-spy), so the
      state is "where you last jumped to" — accent color + bold is
@@ -1722,12 +2161,12 @@ body.theme-dark #baseline-toc .bsw-toc-item:hover {
   font-weight: 600;
 }
 
-#baseline-toc .bsw-toc-list::-webkit-scrollbar { width: 6px; }
-#baseline-toc .bsw-toc-list::-webkit-scrollbar-thumb {
+.bsw-column-toc .bsw-toc-list::-webkit-scrollbar { width: 6px; }
+.bsw-column-toc .bsw-toc-list::-webkit-scrollbar-thumb {
   background: var(--background-modifier-border, rgba(127, 127, 127, 0.20));
   border-radius: 3px;
 }
-#baseline-toc .bsw-toc-list::-webkit-scrollbar-track { background: transparent; }
+.bsw-column-toc .bsw-toc-list::-webkit-scrollbar-track { background: transparent; }
 
 /* Mid-width safety net (900–1100px): even if the TOC happens to be open
    when the user drags the window into this band, don't reserve a 360px
@@ -1744,12 +2183,12 @@ body.theme-dark #baseline-toc .bsw-toc-item:hover {
   .view-content.bsw-with-toc:not(.bsw-toc-collapsed) .bsw-doc-tools {
     right: 12px;
   }
-  #baseline-toc {
+  .bsw-column-toc {
     background: var(--background-primary, #ffffff);
     border-left: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.08));
     box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
   }
-  body.theme-dark #baseline-toc {
+  body.theme-dark .bsw-column-toc {
     box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
   }
 }
@@ -1758,26 +2197,10 @@ body.theme-dark #baseline-toc .bsw-toc-item:hover {
    would smother the column there. Edit + copy stay visible (they're not
    tied to the TOC). */
 @media (max-width: 900px) {
-  #baseline-toc,
+  .bsw-column-toc,
   .bsw-doc-tools > .bsw-toc-toggle { display: none; }
   .view-content.bsw-with-toc { display: block; }
 }
-
-/* ──────────────────────────────────────────────────────────────
-   Reading-progress bar (src/toc.js → mountProgressBar)
-   ────────────────────────────────────────────────────────────── */
-#baseline-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 2px;
-  width: 0%;
-  background: #2c84db;
-  z-index: 2147483647;
-  transition: width 0.1s linear;
-  pointer-events: none;
-}
-body.theme-dark #baseline-progress { background: #5aa6f1; }
 
 /* ──────────────────────────────────────────────────────────────
    Viewer status pill
@@ -1969,23 +2392,24 @@ body.theme-dark #bsw-md-hint .bsw-md-hint-close:hover {
 /* ──────────────────────────────────────────────────────────────
    Print styles
    ──────────────────────────────────────────────────────────────
-   Strip extension chrome (switcher, TOC, progress bar, heading
-   anchors), force a light palette for predictable ink, and let
-   the reading column use the full page width. */
+   Strip extension chrome (switcher, TOC, heading anchors, etc.),
+   force a light palette for predictable ink, and let the reading
+   column use the full page width. */
 
 @media print {
   #baseline-switcher,
-  #baseline-toc,
-  #baseline-progress,
+  .bsw-column-toc,
   #baseline-toast,
   #bsw-viewer-status,
   #bsw-md-hint,
   .bsw-doc-tools,
   .bsw-heading-anchor,
-  .bsw-code-copy,
-  .bsw-fold-toggle {
+  .bsw-code-copy {
     display: none !important;
   }
+  /* Print the li::before bullet; no chevron on paper. */
+  .markdown-rendered .bsw-fold-chevron { display: none !important; }
+  .markdown-rendered ul > li.bsw-foldable::before { opacity: 1 !important; }
   /* Print expanded — never carry hidden content into paper. */
   .markdown-rendered li.bsw-foldable.is-collapsed > ul,
   .markdown-rendered li.bsw-foldable.is-collapsed > ol {

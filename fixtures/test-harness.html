@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BSW test harness</title>
+  <link rel="stylesheet" href="../vendor/katex.min.css" />
+  <link rel="stylesheet" href="../styles/theme.css" />
+  <link rel="stylesheet" href="../styles/extension.css" />
+  <link rel="stylesheet" href="../styles/claude-preset.css" />
+  <style>
+    body.theme-light { margin: 0; }
+    #results { font: 13px/1.5 system-ui; padding: 12px; border-top: 1px solid #ccc; }
+    #results .fail { color: #b42318; }
+    #results .pass { color: #1a7f37; }
+  </style>
+</head>
+<body class="theme-light bsw-width-standard">
+  <div class="app-container">
+    <div class="horizontal-main-container">
+      <div class="workspace mod-vertical mod-root">
+        <div class="workspace-split mod-vertical mod-root">
+          <div class="workspace-tabs mod-top mod-active">
+            <div class="workspace-tab-container">
+              <div class="workspace-leaf mod-active">
+                <div class="workspace-leaf-content" id="leaf">
+                  <div class="view-content" id="main-col">
+                    <div class="markdown-reading-view">
+                      <div class="markdown-preview-view markdown-rendered">
+                        <div class="markdown-preview-sizer" id="mount"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="results"></div>
+  <script src="../vendor/marked.min.js"></script>
+  <script src="../vendor/purify.min.js"></script>
+  <script src="../vendor/highlight.min.js"></script>
+  <script src="../vendor/katex.min.js"></script>
+  <script src="../vendor/katex-auto-render.min.js"></script>
+  <script src="../src/obsidian-syntax.js"></script>
+  <script src="../src/renderer.js"></script>
+  <script>
+    (async function () {
+      const mount = document.getElementById("mount");
+      const res = document.getElementById("results");
+      const md = await fetch("markdown-renderer-test.md").then((r) => r.text());
+      await window.BaselineRenderer.renderTo(md, mount, {
+        baseUrl: location.href
+      });
+
+      const checks = [
+        ["A-renderer: HTTPS image", () => {
+          const img = mount.querySelector('img[src*="picsum.photos"]');
+          return img && img.alt === "Alt text" && img.title === "Optional title";
+        }],
+        ["A-renderer: highlight", () =>
+          mount.innerHTML.includes("<mark>highlighted text</mark>")],
+        ["A-renderer: highlight with =", () =>
+          mount.innerHTML.includes("<mark>with=equals inside</mark>")],
+        ["A-renderer: subscript", () => mount.innerHTML.includes("H<sub>2</sub>O")],
+        ["A-renderer: superscript", () => mount.innerHTML.includes("x<sup>2</sup>")],
+        ["A-renderer: strikethrough", () => mount.innerHTML.includes("<del>deleted</del>")],
+        ["A-renderer: emoji", () => {
+          const t = mount.textContent;
+          return t.includes("\u{1F680}") && t.includes("\u2705") && !t.includes(":rocket:");
+        }],
+        ["A-renderer: RTL", () => !!mount.querySelector('[dir="rtl"]')],
+        ["A-sanity: h1", () => !!mount.querySelector("h1")],
+        ["A-sanity: table", () => mount.querySelectorAll("table th").length >= 2],
+        ["A-sanity: task checkbox", () =>
+          !!mount.querySelector('li input[type="checkbox"]')],
+        ["A-sanity: blockquote", () => !!mount.querySelector("blockquote")],
+        ["A-sanity: code", () => !!mount.querySelector("pre code")],
+        ["A-sanity: mermaid block", () => !!mount.querySelector("pre.mermaid")],
+        ["A-sanity: details", () => !!mount.querySelector("details")],
+        ["A-sanity: kbd", () => !!mount.querySelector("kbd")],
+        ["A-sanity: link", () => !!mount.querySelector('a[href^="https://example.com"]')],
+        ["B-split: layout heights", () => {
+          document.body.classList.add("bsw-twopane-active", "bsw-split-active");
+          const leaf = document.getElementById("leaf");
+          const right = document.createElement("div");
+          right.className = "view-content bsw-side-right";
+          right.innerHTML =
+            '<div class="markdown-reading-view"><div class="markdown-preview-view">' +
+            '<div class="bsw-split-empty bsw-open-empty">empty</div></div></div>';
+          leaf.appendChild(right);
+          const cols = leaf.querySelectorAll(":scope > .view-content");
+          const h = leaf.offsetHeight;
+          const ok = cols.length === 2 && h >= window.innerHeight * 0.9 &&
+            cols[0].offsetHeight >= h * 0.9 && cols[1].offsetHeight >= h * 0.9;
+          document.body.classList.remove("bsw-twopane-active", "bsw-split-active");
+          right.remove();
+          return ok;
+        }]
+      ];
+
+      let fail = 0;
+      for (const [name, fn] of checks) {
+        let ok = false;
+        try { ok = !!fn(); } catch (e) { ok = false; }
+        const line = document.createElement("div");
+        line.className = ok ? "pass" : "fail";
+        line.textContent = (ok ? "PASS" : "FAIL") + " — " + name;
+        res.appendChild(line);
+        if (!ok) fail++;
+      }
+      document.title = fail ? "FAIL:" + fail : "PASS: all";
+    })();
+  </script>
+</body>
+</html>

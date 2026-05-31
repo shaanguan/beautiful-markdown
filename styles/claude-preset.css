@@ -1,0 +1,82 @@
+/* Claude preset — colors via presets/claude.json; reading chrome from
+   claude-typora-theme v1.0.0 (system fonts only, no bundled files). */
+
+html[data-bsw-preset="claude"] .markdown-preview-view {
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view :is(h1, h2, h3, h4, h5, h6) {
+  letter-spacing: normal;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view a {
+  color: var(--link-color);
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view a:hover {
+  color: var(--link-color-hover);
+  text-decoration-color: var(--link-color-hover);
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view ::selection {
+  background-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view :not(pre) > code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view pre code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Tables — Typora Claude: horizontal row lines; beat theme tbody border reset. */
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table {
+  --bsw-table-line-head: rgba(31, 30, 29, 0.35);
+  --bsw-table-line-body: rgba(31, 30, 29, 0.2);
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+html[data-bsw-preset="claude"] .theme-dark div.markdown-preview-view.markdown-rendered table {
+  --bsw-table-line-head: rgba(222, 220, 209, 0.35);
+  --bsw-table-line-body: rgba(222, 220, 209, 0.2);
+}
+
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table th,
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table td {
+  border: none;
+  padding: 0.5rem 1rem;
+  font-size: 0.875em;
+  line-height: 1.7;
+  background: transparent !important;
+}
+
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table > thead > tr > th {
+  border-bottom: 1px solid var(--bsw-table-line-head);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table > tbody > tr > td {
+  border-bottom: 1px solid var(--bsw-table-line-body);
+  white-space: normal;
+}
+
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table > tbody > tr:last-child > td {
+  border-bottom: 1px solid var(--bsw-table-line-body);
+}
+
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table tbody tr:hover,
+html[data-bsw-preset="claude"] div.markdown-preview-view.markdown-rendered table tbody tr:hover > td {
+  background: transparent !important;
+}

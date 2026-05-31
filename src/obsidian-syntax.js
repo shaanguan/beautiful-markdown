@@ -23,6 +23,72 @@
 (function (root) {
   "use strict";
 
+  // Common `:name:` shortcodes (no extra dependency).
+  const EMOJI_SHORTCODES = {
+    rocket: "\u{1F680}",
+    white_check_mark: "\u2705",
+    warning: "\u26A0\uFE0F",
+    smile: "\u{1F604}",
+    heart: "\u2764\uFE0F",
+    thumbsup: "\u{1F44D}",
+    thumbsdown: "\u{1F44E}",
+    fire: "\u{1F525}",
+    star: "\u2B50",
+    tada: "\u{1F389}",
+    bulb: "\u{1F4A1}",
+    memo: "\u{1F4DD}",
+    link: "\u{1F517}",
+    x: "\u274C",
+    heavy_check_mark: "\u2714\uFE0F",
+    exclamation: "\u2757",
+    question: "\u2753",
+    info: "\u2139\uFE0F",
+    zap: "\u26A1",
+    eyes: "\u{1F440}",
+    thinking: "\u{1F914}",
+    party: "\u{1F973}",
+    sob: "\u{1F62D}",
+    joy: "\u{1F602}",
+    wink: "\u{1F609}",
+    clap: "\u{1F44F}",
+    pray: "\u{1F64F}",
+    ok_hand: "\u{1F44C}",
+    point_right: "\u{1F449}",
+    arrow_right: "\u27A1\uFE0F",
+    arrow_left: "\u2B05\uFE0F",
+    hourglass: "\u231B",
+    calendar: "\u{1F4C5}",
+    chart_with_upwards_trend: "\u{1F4C8}",
+    bug: "\u{1F41B}",
+    wrench: "\u{1F527}",
+    lock: "\u{1F512}",
+    unlock: "\u{1F513}",
+    key: "\u{1F511}",
+    book: "\u{1F4D6}",
+    books: "\u{1F4DA}",
+    computer: "\u{1F4BB}",
+    email: "\u{1F4E7}",
+    phone: "\u{1F4F1}",
+    globe: "\u{1F30D}",
+    sun: "\u2600\uFE0F",
+    moon: "\u{1F319}",
+    cloud: "\u2601\uFE0F",
+    umbrella: "\u2614",
+    snowflake: "\u2744\uFE0F",
+    coffee: "\u2615",
+    pizza: "\u{1F355}",
+    apple: "\u{1F34E}",
+    dog: "\u{1F436}",
+    cat: "\u{1F431}",
+    bird: "\u{1F426}"
+  };
+
+  function inlineInner(token) {
+    return token.tokens && this.parser && this.parser.parseInline
+      ? this.parser.parseInline(token.tokens)
+      : escapeHTML(token.text || "");
+  }
+
   /** @type {import('marked').MarkedExtension} */
   const obsidianExtensions = {
     extensions: [
@@ -83,16 +149,16 @@
       {
         name: "highlight",
         level: "inline",
+        priority: 100,
         start(src) {
           const i = src.indexOf("==");
           return i < 0 ? undefined : i;
         },
         tokenizer(src) {
-          const m = /^==([^=\n]+?)==/.exec(src);
+          // Allow `=` inside the span; closing delimiter must be `==`.
+          const m = /^==((?:[^=]|=(?!=))+?)==/.exec(src);
           if (!m) return;
           const text = m[1];
-          // In a tokenizer, `this` is the Lexer — tokenize inline now,
-          // so the renderer (where `this` is `{parser}`) can just parseInline.
           return {
             type: "highlight",
             raw: m[0],
@@ -101,22 +167,116 @@
           };
         },
         renderer(token) {
-          const inner = this.parser && this.parser.parseInline
-            ? this.parser.parseInline(token.tokens)
-            : escapeHTML(token.text);
-          return `<mark>${inner}</mark>`;
+          return `<mark>${inlineInner.call(this, token)}</mark>`;
+        }
+      },
+      {
+        // GFM in this marked build treats single `~` as strikethrough, which
+        // breaks Obsidian-style subscripts. Claim `~~…~~` here (double only).
+        name: "strike",
+        level: "inline",
+        priority: 999,
+        start(src) {
+          const i = src.indexOf("~~");
+          return i < 0 ? undefined : i;
+        },
+        tokenizer(src) {
+          const m = /^~~([^~\n]+?)~~/.exec(src);
+          if (!m) return;
+          return {
+            type: "strike",
+            raw: m[0],
+            text: m[1],
+            tokens: this.lexer.inlineTokens(m[1])
+          };
+        },
+        renderer(token) {
+          return `<del>${inlineInner.call(this, token)}</del>`;
+        }
+      },
+      {
+        name: "subscript",
+        level: "inline",
+        priority: 1000,
+        start(src) {
+          const m = src.match(/~([^~\s][^~]*?)~/);
+          if (!m) return undefined;
+          const idx = src.indexOf(m[0]);
+          if (idx >= 0 && src.slice(idx).startsWith("~~")) return undefined;
+          return idx;
+        },
+        tokenizer(src) {
+          if (src.startsWith("~~")) return;
+          const m = /^~([^~\s\n][^~]*?)~/.exec(src);
+          if (!m) return;
+          return {
+            type: "subscript",
+            raw: m[0],
+            text: m[1],
+            tokens: this.lexer.inlineTokens(m[1])
+          };
+        },
+        renderer(token) {
+          return `<sub>${inlineInner.call(this, token)}</sub>`;
+        }
+      },
+      {
+        name: "superscript",
+        level: "inline",
+        priority: 1000,
+        start(src) {
+          const m = src.match(/\^([^\s^][^^]*?)\^/);
+          return m ? src.indexOf(m[0]) : undefined;
+        },
+        tokenizer(src) {
+          const m = /^\^([^\s\n^][^^]*?)\^/.exec(src);
+          if (!m) return;
+          return {
+            type: "superscript",
+            raw: m[0],
+            text: m[1],
+            tokens: this.lexer.inlineTokens(m[1])
+          };
+        },
+        renderer(token) {
+          return `<sup>${inlineInner.call(this, token)}</sup>`;
+        }
+      },
+      {
+        name: "emoji",
+        level: "inline",
+        priority: 90,
+        start(src) {
+          const m = src.match(/(?:^|[\s([{>"]):([a-z0-9_+-]{2,}):/i);
+          if (!m) return undefined;
+          const needle = ":" + m[1] + ":";
+          return src.indexOf(needle);
+        },
+        tokenizer(src) {
+          const m = /^:([a-z0-9_+-]{2,}):/i.exec(src);
+          if (!m) return;
+          const glyph = EMOJI_SHORTCODES[m[1].toLowerCase()];
+          if (!glyph) return;
+          return { type: "emoji", raw: m[0], glyph };
+        },
+        renderer(token) {
+          return token.glyph;
         }
       },
       {
         name: "tag",
         level: "inline",
+        // Unicode-aware so CJK / accented tags (#中文标签, #café) render too.
+        // Mirrors the hashtag pattern in translator-core's protectMarkdown —
+        // previously the tag here was ASCII-only, so a #中文 tag was protected
+        // during translation but rendered as raw text in the page.
         start(src) {
-          const m = /(^|\s)#[A-Za-z0-9_/-]/.exec(src);
+          const m = /(^|\s)#[\p{L}\p{N}_/-]/u.exec(src);
           return m ? m.index + (m[1] ? 1 : 0) : undefined;
         },
         tokenizer(src) {
           // Must be at start of input or preceded by whitespace (handled by start()).
-          const m = /^#([A-Za-z0-9_/-]+)/.exec(src);
+          const m = /^#([\p{L}\p{N}_/-]+)/u.exec(src);
           if (!m) return;
           return { type: "tag", raw: m[0], tagName: m[1] };
         },

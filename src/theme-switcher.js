@@ -101,6 +101,7 @@
    *   setCustomPresets:(list:Array)=>void,
    *   setTranslateState:(s:{phase?:'idle'|'busy'|'error', message?:string|null})=>void,
    *   setTranslatorSettings:(s:object)=>void,
+   *   setTranslateUiHidden:(hidden:boolean)=>void,
    *   destroy:()=>void
    * }}
    */
@@ -129,7 +130,8 @@
       translatorSettings: Object.assign({}, tDefaults, opts.translatorSettings || {}),
       // "idle" | "busy" | "done" | "error"
       translatePhase: "idle",
-      translateMessage: ""
+      translateMessage: "",
+      translateUiHidden: false
     };
 
     const root_ = document.createElement("div");
@@ -725,6 +727,31 @@
       if (state.settingsOpen) settingsView.refresh(state.translatorSettings);
     }
 
+    /** Hide the translate toggle/panel (e.g. md 分栏视图 — compare two files, no translate). */
+    function setTranslateUiHidden(hidden) {
+      if (!translateToggle) return;
+      state.translateUiHidden = !!hidden;
+      root_.classList.toggle("bsw-translate-ui-hidden", hidden);
+      translateToggle.hidden = hidden;
+      if (divider) divider.hidden = hidden;
+      if (hidden) {
+        if (state.openPanel === "translate") setOpenPanel(null);
+        else if (translatePanel) translatePanel.hidden = true;
+      } else if (translatePanel) {
+        translatePanel.hidden = state.openPanel !== "translate";
+      }
+    }
+
+    /** Hide the whole switcher (e.g. plugin blank tab before any content). */
+    function setUiHidden(hidden) {
+      const h = !!hidden;
+      root_.hidden = h;
+      if (h) {
+        setOpenPanel(null);
+        if (translatePanel) translatePanel.hidden = true;
+      }
+    }
+
     /**
      * Apply the widget's color palette (theme-light / theme-dark) independent
      * of preset. Pass the page's RESOLVED mode ("light" or "dark"), not the
@@ -772,6 +799,8 @@
       setCustomPresets,
       setTranslateState,
       setTranslatorSettings,
+      setTranslateUiHidden,
+      setUiHidden,
       destroy
     };
   }
