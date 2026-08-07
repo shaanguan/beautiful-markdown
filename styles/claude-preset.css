@@ -1,0 +1,172 @@
+/* Claude preset — bundled product expression. The former
+   `claude-typora-theme v1.0.0` attribution could not be traced to a public
+   upstream, so this file deliberately makes no upstream claim. */
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered {
+  font-weight: 400;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(h1, h2, h3, h4, h5, h6) {
+  letter-spacing: normal !important;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view a {
+  color: var(--link-color);
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view a:hover {
+  color: var(--link-color-hover);
+  text-decoration-color: var(--link-color-hover);
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view ::selection {
+  background-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view :not(pre) > code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.12em 0.4em;
+  background: var(--background-secondary) !important;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view pre code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Code is one of the few places where Claude Docs deliberately uses color.
+   Keep prose neutral, then use a compact syntax palette with blue structure,
+   terracotta variables/numbers, green strings and quiet gray comments. */
+html[data-bsw-preset="claude"] body.theme-light .markdown-preview-view .hljs {
+  color: #141413 !important;
+}
+html[data-bsw-preset="claude"] body.theme-light .markdown-preview-view :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-title, .hljs-section,
+  .hljs-attribute, .hljs-attr, .hljs-property, .hljs-name
+) {
+  color: #0b57b7 !important;
+}
+html[data-bsw-preset="claude"] body.theme-light .markdown-preview-view :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable,
+  .hljs-symbol, .hljs-bullet, .hljs-meta
+) {
+  color: #a74420 !important;
+}
+html[data-bsw-preset="claude"] body.theme-light .markdown-preview-view :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) {
+  color: #3f6b35 !important;
+}
+html[data-bsw-preset="claude"] body.theme-light .markdown-preview-view :is(
+  .hljs-comment, .hljs-quote
+) {
+  color: #73726c !important;
+}
+
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view .hljs {
+  color: #faf9f5 !important;
+}
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-title, .hljs-section,
+  .hljs-attribute, .hljs-attr, .hljs-property, .hljs-name
+) {
+  color: #80aadd !important;
+}
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable,
+  .hljs-symbol, .hljs-bullet, .hljs-meta
+) {
+  color: #e08868 !important;
+}
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) {
+  color: #9fbe87 !important;
+}
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view :is(
+  .hljs-comment, .hljs-quote
+) {
+  color: #9c9a92 !important;
+}
+
+/* Claude Docs uses a dual type system: editorial titles are serif, while
+   prose, structural headings, navigation and data remain sans-serif. */
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(h1, h2) {
+  font-family: "Anthropic Serif", Georgia, "Songti SC", "STSong", "Times New Roman", serif !important;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(h3, h4, h5, h6),
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(p, li, table, blockquote) {
+  font-family: "Anthropic Sans", system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif !important;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered pre {
+  border: 0.5px solid var(--background-modifier-border) !important;
+  border-radius: 12px !important;
+  background: var(--bsw-theme-code-surface) !important;
+}
+
+html[data-bsw-preset="claude"] body.theme-light .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-theme-code-surface: #fff;
+}
+
+html[data-bsw-preset="claude"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-theme-code-surface: #30302e;
+}
+
+/* Claude's table identity is expressed only through tokens; the shared
+   typography layer owns padding, overflow, borders and row geometry. */
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-theme-table-head-line: rgba(31, 30, 29, 0.15);
+  --bsw-theme-table-row-line: rgba(31, 30, 29, 0.15);
+}
+
+html[data-bsw-preset="claude"] .theme-dark .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-theme-table-head-line: rgba(222, 220, 209, 0.15);
+  --bsw-theme-table-row-line: rgba(222, 220, 209, 0.15);
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered table {
+  font-family: "Anthropic Sans", system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  color: var(--text-normal) !important;
+}
+
+/* Claude Docs gives data tables a wider working measure than prose. Preserve
+   the prose left axis, expand only toward the free right side, and collapse
+   back to the available column on narrow screens. */
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+  width: min(56rem, calc(100vw - 2 * clamp(20px, 6vw, 80px))) !important;
+  max-width: none !important;
+}
+
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table,
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table :is(thead, tbody, tr) {
+  background: transparent !important;
+}
+
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table > thead > tr > th,
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table > tbody > tr > td {
+  border-bottom-width: 0.5px !important;
+  background: transparent !important;
+}
+
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table :is(th, td):first-child {
+  padding-left: 0 !important;
+}
+
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table :is(th, td):last-child {
+  padding-right: 0 !important;
+}
+
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered pre {
+  box-sizing: border-box !important;
+  width: min(56rem, calc(100vw - 2 * clamp(20px, 6vw, 80px))) !important;
+  max-width: none !important;
+}

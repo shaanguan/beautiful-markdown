@@ -1,0 +1,112 @@
+{
+  "manifest_version": 3,
+  "name": "Beautiful Markdown",
+  "version": "1.7.2",
+  "description": "Render .md files in Chrome with the Obsidian Baseline theme. Supports presets, KaTeX, Mermaid, and Obsidian-style links. © 2026 zhoubo. All rights reserved.",
+  "minimum_chrome_version": "90",
+  "permissions": ["storage", "downloads", "scripting", "contextMenus"],
+  "host_permissions": [
+    "file:///*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_title": "Beautiful Markdown",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/translator-bg.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "file:///*",
+        "http://*/*",
+        "https://*/*"
+      ],
+      "include_globs": [
+        "*.md",  "*.md?*",  "*.md#*",
+        "*.markdown",  "*.markdown?*",  "*.markdown#*",
+        "*.mdown",  "*.mdown?*",  "*.mdown#*",
+        "*.mkd",  "*.mkd?*",  "*.mkd#*"
+      ],
+      "css": ["styles/fouc-guard.css"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "file:///*",
+        "http://*/*",
+        "https://*/*"
+      ],
+      "include_globs": [
+        "*.md",  "*.md?*",  "*.md#*",
+        "*.markdown",  "*.markdown?*",  "*.markdown#*",
+        "*.mdown",  "*.mdown?*",  "*.mdown#*",
+        "*.mkd",  "*.mkd?*",  "*.mkd#*"
+      ],
+      "js": [
+        "vendor/marked.min.js",
+        "vendor/purify.min.js",
+        "vendor/highlight.min.js",
+        "vendor/katex.min.js",
+        "vendor/katex-auto-render.min.js",
+        "src/preset-map.js",
+        "src/baseline-shared.js",
+        "src/baseline-surface.js",
+        "src/obsidian-syntax.js",
+        "src/renderer.js",
+        "src/toc.js",
+        "src/translator-core.js",
+        "src/translator-client.js",
+        "src/selection-menu.js",
+        "src/theme-switcher.js",
+        "src/content.js"
+      ],
+      "css": [
+        "vendor/katex.min.css",
+        "styles/theme.css",
+        "styles/extension.css",
+        "styles/typography.css",
+        "styles/claude-preset.css"
+      ],
+      "run_at": "document_end",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.qianwen.com/*",
+        "https://qianwen.com/*",
+        "https://chat.deepseek.com/*",
+        "https://kimi.com/*",
+        "https://www.kimi.com/*"
+      ],
+      "js": ["src/chatbot-inject.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "vendor/katex-fonts/*",
+        "vendor/mermaid.min.js",
+        "presets/*.json",
+        "prompts/*.md",
+        "fonts/*",
+        "icons/material/*.svg"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

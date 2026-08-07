@@ -1,0 +1,632 @@
+/* Baseline reading typography
+ *
+ * This block is the single source of truth for every preset's reading layout.
+ * Change values here; both the rules below and the runtime lock in
+ * baseline-shared.js consume these variables.
+ */
+:root {
+  --bsw-typography-font-size: 16px;
+  --bsw-typography-line-height: 1.5;
+  --bsw-typography-column-width: 40rem;
+  --bsw-typography-paragraph-spacing: 1.75rem;
+  --bsw-typography-heading-spacing: 2em;
+  --bsw-typography-heading-margin-top: 2em;
+  --bsw-typography-heading-margin-bottom: 0.75em;
+  --bsw-typography-h1-margin-top: var(--bsw-typography-heading-margin-top);
+  --bsw-typography-h1-margin-bottom: var(--bsw-typography-heading-margin-bottom);
+  --bsw-typography-h2-margin-top: var(--bsw-typography-heading-margin-top);
+  --bsw-typography-h2-margin-bottom: var(--bsw-typography-heading-margin-bottom);
+  --bsw-typography-h3-margin-top: var(--bsw-typography-heading-margin-top);
+  --bsw-typography-h3-margin-bottom: var(--bsw-typography-heading-margin-bottom);
+  --bsw-typography-h4-margin-top: var(--bsw-typography-heading-margin-top);
+  --bsw-typography-h4-margin-bottom: var(--bsw-typography-heading-margin-bottom);
+  --bsw-typography-h5-margin-top: var(--bsw-typography-heading-margin-top);
+  --bsw-typography-h5-margin-bottom: var(--bsw-typography-heading-margin-bottom);
+  --bsw-typography-h6-margin-top: var(--bsw-typography-heading-margin-top);
+  --bsw-typography-h6-margin-bottom: var(--bsw-typography-heading-margin-bottom);
+  --bsw-typography-heading-weight: 500;
+  --bsw-typography-h1-size: 1.125em;
+  --bsw-typography-h2-size: 1.05em;
+  --bsw-typography-h3-size: 1em;
+  --bsw-typography-h4-size: 0.90em;
+  --bsw-typography-h5-h6-size: 0.85em;
+  --bsw-typography-h6-size: var(--bsw-typography-h5-h6-size);
+  --bsw-typography-h1-weight: 600;
+  --bsw-typography-h2-weight: 600;
+  --bsw-typography-h3-weight: 500;
+  --bsw-typography-h4-weight: 500;
+  --bsw-typography-h5-weight: 500;
+  --bsw-typography-h6-weight: 400;
+  --bsw-typography-h1-line-height: 1.4;
+  --bsw-typography-h2-line-height: 1.4;
+  --bsw-typography-h3-line-height: 1.4;
+  --bsw-typography-h4-line-height: 1.4;
+  --bsw-typography-h5-line-height: 1.4;
+  --bsw-typography-h6-line-height: 1.4;
+  --bsw-typography-h1-letter-spacing: 0;
+  --bsw-typography-heading-letter-spacing: 0;
+  --bsw-typography-list-spacing: 1.75rem;
+  --bsw-typography-list-item-spacing: 0.075em;
+  --bsw-typography-list-indent: 1.75em;
+  --bsw-typography-nested-list-indent: 1.5em;
+  --bsw-typography-nested-list-spacing: 0.25em;
+  --bsw-typography-task-padding-block: 0.2em;
+  --bsw-typography-quote-border-width: 2px;
+  --bsw-typography-quote-padding: 1.5em;
+  --bsw-typography-quote-padding-block: 0.125em;
+  --bsw-typography-quote-margin: 1.75rem;
+  --bsw-typography-inline-code-size: 0.9em;
+  --bsw-typography-inline-code-radius: 4px;
+  --bsw-typography-code-block-padding: 1em;
+  --bsw-typography-code-block-margin: 1.75rem;
+  --bsw-typography-code-block-line-height: 1.45;
+  --bsw-typography-table-size: 0.875em;
+  --bsw-typography-table-margin: 1.75rem;
+  --bsw-typography-rule-margin: 2em;
+  --bsw-component-radius: 6px;
+  --bsw-typography-fallback-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bsw-typography-text-color: #2f333a;
+  --bsw-typography-quote-color: #747d8a;
+  --bsw-typography-quote-accent: #d6d6d6;
+}
+
+/* Vibe repeats the shared reading geometry explicitly as documentation of its
+ * measured source. Named presets inherit the same structure and only replace
+ * expression tokens below. */
+html:not([data-bsw-preset]) {
+  --bsw-typography-line-height: 1.9;
+  --bsw-typography-h1-size: 2.5rem;
+  --bsw-typography-h2-size: 1.875rem;
+  --bsw-typography-h3-size: 1.3125rem;
+  --bsw-typography-h4-size: 1.125rem;
+  --bsw-typography-h5-h6-size: 1rem;
+  --bsw-typography-h6-size: 0.875rem;
+  --bsw-typography-h1-weight: 400;
+  --bsw-typography-h2-weight: 600;
+  --bsw-typography-h3-weight: 600;
+  --bsw-typography-h4-weight: 600;
+  --bsw-typography-h5-weight: 600;
+  --bsw-typography-h6-weight: 600;
+  --bsw-typography-h1-line-height: 1.25;
+  --bsw-typography-h2-line-height: 1.3;
+  --bsw-typography-h3-line-height: 1.4;
+  --bsw-typography-h1-margin-top: 72px;
+  --bsw-typography-h1-margin-bottom: 24px;
+  --bsw-typography-h2-margin-top: 64px;
+  --bsw-typography-h2-margin-bottom: 22px;
+  --bsw-typography-h3-margin-top: 46px;
+  --bsw-typography-h3-margin-bottom: 16px;
+  --bsw-typography-h4-margin-top: 36px;
+  --bsw-typography-h4-margin-bottom: 14px;
+  --bsw-typography-h5-margin-top: 30px;
+  --bsw-typography-h5-margin-bottom: 12px;
+  --bsw-typography-h6-margin-top: 26px;
+  --bsw-typography-h6-margin-bottom: 10px;
+}
+
+html:not([data-bsw-preset]) body.theme-light {
+  --background-primary: #fafafa;
+  --background-primary-alt: #f5f5f3;
+  --text-normal: #191a1b;
+  --text-muted: rgba(25, 26, 27, 0.62);
+  --text-faint: rgba(25, 26, 27, 0.42);
+}
+
+html:not([data-bsw-preset]) body.theme-dark {
+  --background-primary: #1d1d1c;
+  --background-primary-alt: #242423;
+  --text-normal: #f0efeb;
+  --text-muted: rgba(240, 239, 235, 0.68);
+  --text-faint: rgba(240, 239, 235, 0.44);
+}
+
+/* Component colors must be resolved where body theme variables are already in
+ * scope. Defining these on :root freezes light fallbacks before body.theme-dark
+ * can participate, producing white code blocks in dark mode. */
+html .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-component-border: color-mix(in srgb, var(--text-normal, #2f333a) 12%, transparent);
+  --bsw-component-border-strong: color-mix(in srgb, var(--text-normal, #2f333a) 18%, transparent);
+  --bsw-component-surface-subtle: color-mix(in srgb, var(--text-normal, #2f333a) 3%, transparent);
+  --bsw-code-block-surface: color-mix(in srgb, var(--text-normal, #2f333a) 7%, var(--background-primary, #fff));
+  --bsw-quote-rule-color: color-mix(in srgb, var(--text-muted, #747d8a) 52%, transparent);
+  --bsw-theme-quote-rule-width: 2px;
+  --bsw-theme-quote-text: color-mix(in srgb, var(--text-normal, #2f333a) 62%, transparent);
+  --bsw-theme-code-surface: var(--bsw-code-block-surface);
+  --bsw-theme-component-radius: 6px;
+  --bsw-theme-marker-color: color-mix(in srgb, var(--text-normal, #2f333a) 62%, transparent);
+  --bsw-theme-table-head-line: var(--bsw-component-border-strong);
+  --bsw-theme-table-row-line: var(--bsw-component-border);
+  --bsw-theme-rule-color: var(--bsw-component-border);
+}
+
+html[data-bsw-preset="minimal"] .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-theme-quote-rule-width: 2px;
+  --bsw-quote-rule-color: color-mix(in srgb, var(--text-muted) 42%, transparent);
+  --bsw-theme-code-surface: color-mix(in srgb, var(--text-normal) 5%, var(--background-primary));
+  --bsw-theme-component-radius: 4px;
+}
+
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered {
+  /* Official Claude heading tokens mapped to Markdown levels. The token
+   * values are sourced; the H1-H6 mapping is a Baseline product choice. */
+  --bsw-typography-h1-size: 2.25rem;
+  --bsw-typography-h2-size: 1.5rem;
+  --bsw-typography-h3-size: 1.25rem;
+  --bsw-typography-h4-size: 1rem;
+  --bsw-typography-h5-h6-size: 0.875rem;
+  --bsw-typography-h6-size: 0.875rem;
+  --bsw-typography-h1-weight: 400;
+  --bsw-typography-h2-weight: 400;
+  --bsw-typography-h3-weight: 600;
+  --bsw-typography-h4-weight: 600;
+  --bsw-typography-h5-weight: 600;
+  --bsw-typography-h6-weight: 400;
+  --bsw-typography-h1-line-height: 1;
+  --bsw-typography-h2-line-height: 1.25;
+  --bsw-typography-h3-line-height: 1.25;
+  --bsw-typography-h4-line-height: 1.25;
+  --bsw-typography-h5-line-height: 1.4;
+  --bsw-typography-h6-line-height: 1.4;
+  --bsw-theme-quote-rule-width: 2px;
+  --bsw-quote-rule-color: color-mix(in srgb, var(--text-normal) 18%, transparent);
+  --bsw-theme-quote-text: color-mix(in srgb, var(--text-normal) 72%, transparent);
+  --bsw-theme-code-surface: var(--prompt-background, var(--background-primary));
+  --bsw-theme-component-radius: 12px;
+  --bsw-theme-table-head-line: color-mix(in srgb, var(--text-normal) 30%, transparent);
+  --bsw-theme-table-row-line: color-mix(in srgb, var(--text-normal) 15%, transparent);
+}
+
+html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-theme-quote-rule-width: 3px;
+  --bsw-quote-rule-color: color-mix(in srgb, var(--interactive-accent, #3584e4) 62%, transparent);
+  --bsw-theme-code-surface: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary));
+  --bsw-theme-component-radius: 8px;
+  --bsw-theme-table-head-line: color-mix(in srgb, var(--text-normal) 24%, transparent);
+}
+
+/* Product-fixed reading defaults. Theme files may replace expression tokens,
+ * but never the column width, base size or document flow. */
+html .app-container .markdown-preview-view.markdown-rendered {
+  --line-height-normal: var(--bsw-typography-line-height) !important;
+  --p-spacing: var(--bsw-typography-paragraph-spacing) !important;
+  --heading-spacing: var(--bsw-typography-heading-spacing) !important;
+  --readable-spacing-modifier: 1 !important;
+  --file-line-width: var(--bsw-typography-column-width) !important;
+  font-family: var(--font-text, var(--bsw-typography-fallback-font)) !important;
+  font-size: var(--bsw-typography-font-size) !important;
+  line-height: var(--bsw-typography-line-height) !important;
+  color: var(--text-normal, var(--bsw-typography-text-color)) !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+}
+
+html:not([data-bsw-preset]) .app-container .markdown-preview-view.markdown-rendered {
+  font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+  color: color-mix(in srgb, var(--text-normal, #191a1b) 72%, transparent) !important;
+}
+
+html:not([data-bsw-preset]) .app-container .markdown-preview-view.markdown-rendered h1 {
+  font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+  color: var(--text-normal, #191a1b) !important;
+}
+
+/* Body raises only the expression rule above the later upstream fallback;
+ * geometry remains owned by the universal contract. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered h1 {
+  font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+}
+
+html:not([data-bsw-preset]) .app-container .markdown-preview-view.markdown-rendered :is(h2,h3,h4,h5,h6,strong) {
+  font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+  color: var(--text-normal, #191a1b) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered p {
+  margin-block: 0 !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered p + p {
+  margin-top: var(--bsw-typography-paragraph-spacing) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(h1,h2,h3,h4,h5,h6) {
+  line-height: var(--bsw-typography-h3-line-height) !important;
+  margin-top: var(--bsw-typography-heading-margin-top) !important;
+  margin-bottom: var(--bsw-typography-heading-margin-bottom) !important;
+  letter-spacing: var(--bsw-typography-heading-letter-spacing) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered h1 {
+  font-family: var(--h1-font, var(--font-text, var(--bsw-typography-fallback-font))) !important;
+  font-size: var(--bsw-typography-h1-size) !important;
+  font-weight: var(--bsw-typography-h1-weight) !important;
+  line-height: var(--bsw-typography-h1-line-height) !important;
+  letter-spacing: var(--bsw-typography-h1-letter-spacing) !important;
+  margin: var(--bsw-typography-h1-margin-top) 0 var(--bsw-typography-h1-margin-bottom) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered h2 {
+  font-family: var(--h2-font, var(--font-text, var(--bsw-typography-fallback-font))) !important;
+  font-size: var(--bsw-typography-h2-size) !important;
+  font-weight: var(--bsw-typography-h2-weight) !important;
+  line-height: var(--bsw-typography-h2-line-height) !important;
+  margin: var(--bsw-typography-h2-margin-top) 0 var(--bsw-typography-h2-margin-bottom) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered h3 {
+  font-family: var(--h3-font, var(--font-text, var(--bsw-typography-fallback-font))) !important;
+  font-size: var(--bsw-typography-h3-size) !important;
+  font-weight: var(--bsw-typography-h3-weight) !important;
+  margin: var(--bsw-typography-h3-margin-top) 0 var(--bsw-typography-h3-margin-bottom) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered h4 {
+  font-family: var(--h4-font, var(--font-text, var(--bsw-typography-fallback-font))) !important;
+  font-size: var(--bsw-typography-h4-size) !important;
+  font-weight: var(--bsw-typography-h4-weight) !important;
+  margin: var(--bsw-typography-h4-margin-top) 0 var(--bsw-typography-h4-margin-bottom) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered h5 {
+  font-family: var(--h5-font, var(--font-text, var(--bsw-typography-fallback-font))) !important;
+  font-size: var(--bsw-typography-h5-h6-size) !important;
+  font-weight: var(--bsw-typography-h5-weight) !important;
+  margin: var(--bsw-typography-h5-margin-top) 0 var(--bsw-typography-h5-margin-bottom) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered h6 {
+  font-family: var(--h6-font, var(--font-text, var(--bsw-typography-fallback-font))) !important;
+  font-size: var(--bsw-typography-h6-size) !important;
+  font-weight: var(--bsw-typography-h6-weight) !important;
+  margin: var(--bsw-typography-h6-margin-top) 0 var(--bsw-typography-h6-margin-bottom) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(ul,ol) {
+  margin-block: var(--bsw-typography-list-spacing) !important;
+  margin-inline: 0 !important;
+  padding-left: var(--bsw-typography-list-indent) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered li > :is(ul,ol) {
+  margin-block: var(--bsw-typography-nested-list-spacing) !important;
+  padding-left: var(--bsw-typography-nested-list-indent) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered li + li {
+  margin-top: var(--bsw-typography-list-item-spacing) !important;
+}
+
+/* Task rows are prose list items, not vertically padded cards. Keep a small
+ * hover target without doubling the normal list rhythm. */
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered ul.contains-task-list {
+  margin-block: var(--bsw-typography-list-spacing) !important;
+  padding-left: 0 !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered li.task-list-item {
+  min-height: 0 !important;
+  margin-top: var(--bsw-typography-list-item-spacing) !important;
+  margin-right: -0.5em !important;
+  margin-bottom: 0 !important;
+  margin-left: -0.5em !important;
+  padding: var(--bsw-typography-task-padding-block) 0.5em var(--bsw-typography-task-padding-block) 2em !important;
+  line-height: var(--bsw-typography-line-height) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered li.task-list-item:first-child {
+  margin-top: 0 !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered blockquote {
+  border-inline-start-width: var(--bsw-theme-quote-rule-width) !important;
+  padding-left: var(--bsw-typography-quote-padding) !important;
+  padding-block: var(--bsw-typography-quote-padding-block) !important;
+  margin-block: var(--bsw-typography-quote-margin) !important;
+  margin-inline: 0 !important;
+  border-radius: 0 !important;
+  color: var(--blockquote-color, var(--text-muted, var(--bsw-typography-quote-color))) !important;
+  min-height: 0 !important;
+  height: auto !important;
+  box-sizing: border-box !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered blockquote::before {
+  inset: var(--bsw-typography-quote-padding-block) auto var(--bsw-typography-quote-padding-block) 0 !important;
+  height: auto !important;
+  width: var(--bsw-theme-quote-rule-width) !important;
+  border-radius: 999px !important;
+  background-color: var(--bsw-quote-rule-color) !important;
+}
+
+/* Paragraph spacing belongs between document blocks, not inside a quote.
+ * theme.css already supplies the quote's own padding; keeping p margins here
+ * would double the vertical whitespace and make one-line quotes look huge. */
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered blockquote > p {
+  margin-block: 0 !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :not(pre) > code {
+  font-size: var(--bsw-typography-inline-code-size) !important;
+  border-radius: var(--bsw-typography-inline-code-radius) !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered pre {
+  padding: var(--bsw-typography-code-block-padding) !important;
+  line-height: var(--bsw-typography-code-block-line-height) !important;
+  border: 0 !important;
+  border-radius: var(--bsw-theme-component-radius) !important;
+  background: var(--bsw-theme-code-surface) !important;
+  box-shadow: none !important;
+  font-family: monospace !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered pre code {
+  font-family: monospace !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered table {
+  width: 100% !important;
+  font-size: var(--bsw-typography-table-size) !important;
+  margin-block: var(--bsw-typography-table-margin) !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+}
+
+/* The renderer keeps a wrapper only as an overflow safety boundary. It must
+ * not add a second visual box or a second layer of spacing around the table. */
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+  margin-block: var(--bsw-typography-table-margin) !important;
+  border: 1px solid var(--bsw-component-border-strong) !important;
+  border-radius: var(--bsw-theme-component-radius) !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap > table {
+  width: 100% !important;
+  margin: 0 !important;
+  border-collapse: collapse !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered table :is(th,td) {
+  padding: 0.5em 0.65em !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--bsw-component-border) !important;
+  background: transparent !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered table th {
+  border-bottom-color: var(--bsw-component-border-strong) !important;
+  background: var(--bsw-component-surface-subtle) !important;
+  font-weight: 600 !important;
+}
+
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered hr {
+  margin: var(--bsw-typography-rule-margin) 0 !important;
+}
+
+/* Reading-geometry contract — applies to every preset, including custom ones.
+ * Presets may style these elements, but may not change their density, flow or
+ * wrapping behavior. Keep this block geometry-only: no palette or font identity. */
+html .app-container .markdown-preview-view.markdown-rendered p {
+  margin-block: 0 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered p + p {
+  margin-top: var(--bsw-typography-paragraph-spacing) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered :is(h1,h2,h3,h4,h5,h6) {
+  margin-top: var(--bsw-typography-heading-margin-top) !important;
+  margin-bottom: var(--bsw-typography-heading-margin-bottom) !important;
+  /* Reflow short display lines as a unit so CJK headings do not leave a
+     one-character orphan when the reading column or zoom level changes. */
+  text-wrap: balance !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered h1 {
+  font-size: var(--bsw-typography-h1-size) !important;
+  font-weight: var(--bsw-typography-h1-weight) !important;
+  line-height: var(--bsw-typography-h1-line-height) !important;
+  margin: var(--bsw-typography-h1-margin-top) 0 var(--bsw-typography-h1-margin-bottom) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered h2 {
+  font-size: var(--bsw-typography-h2-size) !important;
+  font-weight: var(--bsw-typography-h2-weight) !important;
+  line-height: var(--bsw-typography-h2-line-height) !important;
+  margin: var(--bsw-typography-h2-margin-top) 0 var(--bsw-typography-h2-margin-bottom) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered h3 {
+  font-size: var(--bsw-typography-h3-size) !important;
+  font-weight: var(--bsw-typography-h3-weight) !important;
+  line-height: var(--bsw-typography-h3-line-height) !important;
+  margin: var(--bsw-typography-h3-margin-top) 0 var(--bsw-typography-h3-margin-bottom) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered h4 {
+  font-size: var(--bsw-typography-h4-size) !important;
+  font-weight: var(--bsw-typography-h4-weight) !important;
+  line-height: var(--bsw-typography-h4-line-height) !important;
+  line-height: var(--bsw-typography-h3-line-height) !important;
+  margin: var(--bsw-typography-h4-margin-top) 0 var(--bsw-typography-h4-margin-bottom) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered h5 {
+  font-size: var(--bsw-typography-h5-h6-size) !important;
+  font-weight: var(--bsw-typography-h5-weight) !important;
+  line-height: var(--bsw-typography-h5-line-height) !important;
+  line-height: var(--bsw-typography-h3-line-height) !important;
+  margin: var(--bsw-typography-h5-margin-top) 0 var(--bsw-typography-h5-margin-bottom) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered h6 {
+  font-size: var(--bsw-typography-h6-size) !important;
+  font-weight: var(--bsw-typography-h6-weight) !important;
+  line-height: var(--bsw-typography-h6-line-height) !important;
+  line-height: var(--bsw-typography-h3-line-height) !important;
+  margin: var(--bsw-typography-h6-margin-top) 0 var(--bsw-typography-h6-margin-bottom) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered :is(ul,ol) {
+  margin-block: var(--bsw-typography-list-spacing) !important;
+  margin-inline: 0 !important;
+  padding-left: var(--bsw-typography-list-indent) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered li > :is(ul,ol) {
+  margin-block: var(--bsw-typography-nested-list-spacing) !important;
+  padding-left: var(--bsw-typography-nested-list-indent) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered ol > li::marker {
+  color: var(--bsw-theme-marker-color) !important;
+  font-family: inherit !important;
+  font-size: 0.875em !important;
+  font-weight: 400 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered li + li {
+  margin-top: var(--bsw-typography-list-item-spacing) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered ul.contains-task-list {
+  margin-block: var(--bsw-typography-list-spacing) !important;
+  padding-left: 0 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered li.task-list-item {
+  min-height: 0 !important;
+  margin: var(--bsw-typography-list-item-spacing) -0.5em 0 !important;
+  padding: var(--bsw-typography-task-padding-block) 0.5em var(--bsw-typography-task-padding-block) 2em !important;
+  line-height: var(--bsw-typography-line-height) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered li.task-list-item:first-child {
+  margin-top: 0 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered blockquote {
+  border-inline-start-width: var(--bsw-theme-quote-rule-width) !important;
+  padding-left: var(--bsw-typography-quote-padding) !important;
+  min-height: 0 !important;
+  height: auto !important;
+  box-sizing: border-box !important;
+  padding-block: var(--bsw-typography-quote-padding-block) !important;
+  margin-block: var(--bsw-typography-quote-margin) !important;
+  margin-inline: 0 !important;
+  color: var(--bsw-theme-quote-text) !important;
+  font-family: inherit !important;
+  font-weight: 400 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered blockquote::before {
+  top: var(--bsw-typography-quote-padding-block) !important;
+  bottom: var(--bsw-typography-quote-padding-block) !important;
+  inset-inline-start: 0 !important;
+  height: auto !important;
+  width: var(--bsw-theme-quote-rule-width) !important;
+  border-radius: 999px !important;
+  background-color: var(--bsw-quote-rule-color) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered blockquote > p {
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  font-size: var(--bsw-typography-font-size) !important;
+  line-height: var(--bsw-typography-line-height) !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered pre {
+  margin-block: var(--bsw-typography-code-block-margin) !important;
+  padding: var(--bsw-typography-code-block-padding) !important;
+  line-height: var(--bsw-typography-code-block-line-height) !important;
+  border: 0 !important;
+  border-radius: var(--bsw-theme-component-radius) !important;
+  background: var(--bsw-theme-code-surface) !important;
+  box-shadow: none !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table {
+  width: 100% !important;
+  margin-block: var(--bsw-typography-table-margin) !important;
+  border-collapse: collapse !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td) {
+  padding: 0.5em 0.65em !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+  margin-block: var(--bsw-typography-table-margin) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap > table {
+  margin: 0 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table > thead > tr > th {
+  border-bottom: 1px solid var(--bsw-theme-table-head-line) !important;
+  background: transparent !important;
+  font-weight: 600 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table > tbody > tr > td {
+  border-bottom: 1px solid var(--bsw-theme-table-row-line) !important;
+  background: transparent !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table > tbody > tr:last-child > td {
+  border-bottom: 0 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td) {
+  border-inline: 0 !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered hr {
+  margin-block: var(--bsw-typography-rule-margin) !important;
+  height: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid var(--bsw-theme-rule-color) !important;
+  background: transparent !important;
+}
+
+/* Vibe is an editorial document surface, not a compact data card. Minimal and
+ * Stone intentionally retain their framed table expressions; Claude owns its
+ * separate wide hairline table in claude-preset.css. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered table,
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered table :is(thead, tbody, tr, th, td) {
+  background: transparent !important;
+}
+
+/* Highlight.js emits semantic classes while the bundled themes expose
+ * Obsidian-style --code-* tokens. Bridge the two so Vibe, Minimal and Stone
+ * use their own palettes instead of collapsing to monochrome. Claude keeps
+ * its directly measured palette in claude-preset.css. */
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered .hljs {
+  color: var(--code-normal) !important;
+}
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name
+) {
+  color: var(--code-keyword) !important;
+}
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(
+  .hljs-title, .hljs-section, .hljs-function
+) {
+  color: var(--code-function) !important;
+}
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) {
+  color: var(--code-property) !important;
+}
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) {
+  color: var(--code-string) !important;
+}
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable,
+  .hljs-symbol, .hljs-bullet, .hljs-meta
+) {
+  color: var(--code-value) !important;
+}
+html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered :is(
+  .hljs-comment, .hljs-quote
+) {
+  color: var(--code-comment) !important;
+}

@@ -1,0 +1,33 @@
+/**
+ * FOUC guard: hide raw .md text and show a loading spinner before the
+ * renderer mounts. content.js adds html.bsw-ready once rendering completes.
+ */
+
+html:not(.bsw-ready) body {
+  visibility: hidden;
+}
+
+html:not(.bsw-ready)::after {
+  content: "";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  animation: bsw-fouc-spin 0.6s linear infinite;
+  visibility: visible;
+  z-index: 99999;
+}
+@media (prefers-color-scheme: dark) {
+  html:not(.bsw-ready)::after {
+    border-color: rgba(255, 255, 255, 0.1);
+    border-top-color: rgba(255, 255, 255, 0.4);
+  }
+}
+@keyframes bsw-fouc-spin {
+  to { transform: rotate(360deg); }
+}
