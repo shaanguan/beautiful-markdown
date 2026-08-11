@@ -574,6 +574,8 @@
       ":scope > [data-action='editorial'], " +
       ":scope > [data-action='copy'], " +
       ":scope > [data-action='swap'], " +
+      ":scope > [data-action='save'], " +
+      ":scope > [data-action='saveback'], " +
       ":scope > [data-action='download']"
     )) {
       old.remove();
@@ -594,45 +596,42 @@
       ownButtons.push(btn);
     };
 
-    // Download — save the current markdown to disk. Placed leftmost so the
-    // most action-y / state-bearing button (it gets a dirty dot when edits
-    // are pending) is the first thing the eye lands on. The "dirty"
-    // affordance is driven by opts.isDirty, queried at mount time; callers
-    // that want live updates use the returned setDirty()/setDownloadVisible
-    // helpers.
-    let downloadBtn = null;
-    if (opts && typeof opts.onDownload === "function") {
-      downloadBtn = makeToolButton({
-        action: "download",
-        tooltip: opts.downloadTooltip || "下载",
-        svg: downloadIcon(),
+    // Save — single button: write-back / Save As / download fallback.
+    // Placed leftmost; dirty dot when edits are pending. Callers pass
+    // hideSave=true when a local file is clean (disk still authoritative).
+    let saveBtn = null;
+    if (opts && typeof opts.onSave === "function") {
+      saveBtn = makeToolButton({
+        action: "save",
+        tooltip: opts.saveTooltip || "保存",
+        svg: saveIcon(),
         onClick: (ev) => {
-          // Anchor the toast at the click point — the button sits in the
-          // top-right corner, so a toast over it gets clipped/feels remote
-          // from where the user just acted. Falls back to the button itself
-          // if the click came from a keyboard-triggered "click" without coords.
           const clickPoint = ev && typeof ev.clientX === "number" && ev.clientX > 0
             ? { x: ev.clientX, y: ev.clientY }
-            : downloadBtn;
+            : saveBtn;
           Promise.resolve()
-            .then(() => opts.onDownload())
-            .then(() => {
-              downloadBtn.classList.remove("is-dirty");
-              showToast(clickPoint, opts.downloadDoneText || "Downloaded");
+            .then(() => opts.onSave())
+            .then((result) => {
+              saveBtn.classList.remove("is-dirty");
+              const mode = result && result.mode;
+              const toast = mode === "download"
+                ? (opts.saveDownloadText || "已下载")
+                : (opts.saveDoneText || "已保存");
+              showToast(clickPoint, toast);
             })
             .catch((err) => {
-              console.warn("[Baseline] download failed:", err);
-              showToast(clickPoint, "Download failed");
+              if (err && (err.name === "AbortError" || /cancelled/i.test(err.message || ""))) {
+                return; // user dismissed Save As — no toast
+              }
+              console.warn("[Baseline] save failed:", err);
+              const denied = err && /permission/i.test(err.message || "");
+              showToast(clickPoint, denied ? "未获得写入权限" : "保存失败");
             });
         }
       });
-      if (opts.isDirty) downloadBtn.classList.add("is-dirty");
-      // Locally-opened files don't need a Download button until the user
-      // edits them — the original on-disk copy is still authoritative.
-      // Caller passes hideDownload=true to start hidden; setDownloadVisible
-      // flips it back on when an edit lands.
-      if (opts.hideDownload) downloadBtn.classList.add("bsw-hidden");
-      insert(downloadBtn);
+      if (opts.isDirty) saveBtn.classList.add("is-dirty");
+      if (opts.hideSave) saveBtn.classList.add("bsw-hidden");
+      insert(saveBtn);
     }
 
     // AI dropdown — translate + editorial layout modes.
@@ -784,7 +783,7 @@
       insert(edDropdown);
     }
 
-    // Width dropdown comes after Download, followed by copy/swap.
+    // Width dropdown comes after Save, followed by copy/swap.
     // The trigger is a single borderless icon button showing the current
     // selection; clicking opens a popup menu with icon+label rows. Caller
     // declares the option list (filtered per-surface: md gets Split, viewer
@@ -943,12 +942,16 @@
         }
       },
       setDirty(dirty) {
-        if (!downloadBtn) return;
-        downloadBtn.classList.toggle("is-dirty", !!dirty);
+        if (saveBtn) saveBtn.classList.toggle("is-dirty", !!dirty);
       },
+      setSaveVisible(visible) {
+        if (!saveBtn) return;
+        saveBtn.classList.toggle("bsw-hidden", !visible);
+      },
+      // Alias kept for callers still using the old name during migration.
       setDownloadVisible(visible) {
-        if (!downloadBtn) return;
-        downloadBtn.classList.toggle("bsw-hidden", !visible);
+        if (!saveBtn) return;
+        saveBtn.classList.toggle("bsw-hidden", !visible);
       },
       setActiveWidth(value) {
         if (widthOptionEls.size) paintActiveWidth(value);
@@ -969,6 +972,19 @@
       'M200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm210-360h60v-180h40v120h60' +
       'v-120h40v180h60v-200q0-17-11.5-28.5T630-680H450q-17 0-28.5 11.5T410-640v200Z' +
       'm-50 120v-480 480Z"/>' +
+      '</svg>'
+    );
+  }
+
+  // Material Symbols "save" — write-back-to-original-file button.
+  function saveIcon() {
+    return (
+      '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" ' +
+      'viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">' +
+      '<path d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200' +
+      'v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446Z' +
+      'M480-240q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Z' +
+      'M240-560h360v-160H240v160Zm-40-86v446-560 114Z"/>' +
       '</svg>'
     );
   }
@@ -1122,11 +1138,12 @@
         actionOpts.onSwap = opts.onSwap;
       }
       if (opts.swapTooltip) actionOpts.swapTooltip = opts.swapTooltip;
-      if (typeof opts.onDownload === "function") {
-        actionOpts.onDownload = opts.onDownload;
+      if (typeof opts.onSave === "function") {
+        actionOpts.onSave = opts.onSave;
       }
-      if (opts.downloadTooltip) actionOpts.downloadTooltip = opts.downloadTooltip;
-      if (opts.downloadDoneText) actionOpts.downloadDoneText = opts.downloadDoneText;
+      if (opts.saveTooltip) actionOpts.saveTooltip = opts.saveTooltip;
+      if (opts.saveDoneText) actionOpts.saveDoneText = opts.saveDoneText;
+      if (opts.saveDownloadText) actionOpts.saveDownloadText = opts.saveDownloadText;
       if (typeof opts.onEditorial === "function") {
         actionOpts.onEditorial = opts.onEditorial;
       }
@@ -1137,7 +1154,7 @@
       if (Array.isArray(opts.translateLanguages)) actionOpts.translateLanguages = opts.translateLanguages;
       if (opts.suggestedTargetLang) actionOpts.suggestedTargetLang = opts.suggestedTargetLang;
       if (opts.isDirty) actionOpts.isDirty = true;
-      if (opts.hideDownload) actionOpts.hideDownload = true;
+      if (opts.hideSave) actionOpts.hideSave = true;
       if (Array.isArray(opts.widthOptions)) actionOpts.widthOptions = opts.widthOptions;
       if (opts.currentWidth) actionOpts.currentWidth = opts.currentWidth;
       if (typeof opts.onWidthChange === "function") actionOpts.onWidthChange = opts.onWidthChange;
@@ -1162,8 +1179,17 @@
           actionsHandle.setActiveWidth(value);
         }
       },
+      setSaveVisible(visible) {
+        if (actionsHandle && typeof actionsHandle.setSaveVisible === "function") {
+          actionsHandle.setSaveVisible(visible);
+        } else if (actionsHandle && typeof actionsHandle.setDownloadVisible === "function") {
+          actionsHandle.setDownloadVisible(visible);
+        }
+      },
       setDownloadVisible(visible) {
-        if (actionsHandle && typeof actionsHandle.setDownloadVisible === "function") {
+        if (actionsHandle && typeof actionsHandle.setSaveVisible === "function") {
+          actionsHandle.setSaveVisible(visible);
+        } else if (actionsHandle && typeof actionsHandle.setDownloadVisible === "function") {
           actionsHandle.setDownloadVisible(visible);
         }
       }

@@ -25,12 +25,12 @@
 
   const { marked } = root;
   const DOMPurify = root.DOMPurify;
-  const hljs = root.hljs;
-  const renderMathInElement = root.renderMathInElement;
   const { obsidianExtensions } = root.BaselineObsidianSyntax;
-  // mermaid is intentionally NOT captured here. It's ~2.5 MB and most .md
-  // files don't contain a single mermaid block, so we lazy-load it inside
-  // runMermaid() the first time a `pre.mermaid` node appears.
+  // hljs / renderMathInElement / mermaid are intentionally NOT captured
+  // here — all three are lazy-loaded on first need (see ensureVendor /
+  // ensureMermaid below), so plain .md pages never pay for KaTeX (~275KB
+  // + fonts), highlight.js (~125KB) or Mermaid (~2.5MB). Always resolve
+  // them through `root.*` at call time.
 
   // highlight.js auto-detection runs EVERY bundled grammar (~190 of them)
   // over the whole block, which dominates render time on code-heavy docs —
@@ -51,12 +51,17 @@
   // Per-render base URL for resolving relative images (set in renderTo).
   let renderBaseUrl = "";
 
+  // Allow file:/data:/blob:/chrome-extension: — DOMPurify's default URI
+  // whitelist strips them, which breaks local markdown images on file://
+  // pages after relative paths are resolved to absolute file: URLs.
   const PURIFY_OPTS = {
     ADD_ATTR: [
       "data-href", "data-alt", "data-tag", "target",
       "src", "alt", "title", "width", "height", "dir"
     ],
-    ADD_TAGS: ["mark", "sub", "sup"]
+    ADD_TAGS: ["mark", "sub", "sup"],
+    ALLOWED_URI_REGEXP:
+      /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data|blob|file|chrome-extension):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
   };
 
   const IMG_SRC_SAFE =
@@ -80,8 +85,10 @@
     breaks: false,
     pedantic: false,
     renderer: {
+      // Keep relative src as-is through sanitize; resolveImageUrls runs after
+      // with renderBaseUrl still set (absolute schemes pass through unchanged).
       image(href, title, text) {
-        const src = escapeAttr(resolveImageHref(href));
+        const src = escapeAttr((href || "").trim());
         const alt = escapeAttr(text || "");
         const titleAttr = title
           ? ` title="${escapeAttr(title)}"`
@@ -94,9 +101,13 @@
         if (lang === "mermaid") {
           return `<pre class="mermaid">${escapeHTML(code)}</pre>`;
         }
+        // Lazy-loaded: renderTo awaits ensureVendor("hljs") before parsing
+        // when the source contains a code fence, so hljs is normally present
+        // here. If the load failed we fall back to escaped plain text.
+        const hljs = root.hljs;
         let highlighted;
-        if (code.length > HLJS_MAX_HIGHLIGHT_CHARS) {
-          // Too big to highlight without risking a visible stall.
+        if (!hljs || code.length > HLJS_MAX_HIGHLIGHT_CHARS) {
+          // Missing highlighter, or too big to highlight without jank.
           highlighted = escapeHTML(code);
         } else if (lang && hljs.getLanguage(lang)) {
           try {
@@ -275,6 +286,92 @@
     }
   }
 
+  // ── Generic lazy vendor loader ──────────────────────────────────
+  // Same dual path as Mermaid's loader: direct <script> on extension pages,
+  // background executeScript into our isolated world on content pages.
+  // `ready()` short-circuits when another page script already provided the
+  // global (e.g. a stale HTML that still ships the <script> tag).
+  const VENDOR_SPECS = {
+    hljs: {
+      files: ["vendor/highlight.min.js"],
+      ready: () => !!root.hljs
+    },
+    katex: {
+      files: ["vendor/katex.min.js", "vendor/katex-auto-render.min.js"],
+      ready: () => typeof root.renderMathInElement === "function",
+      css: "vendor/katex.min.css"
+    }
+  };
+  const vendorPromises = {};
+
+  function injectVendorCss(href) {
+    const id = "bsw-vendor-css-" + href.replace(/[^a-z0-9]+/gi, "-");
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href = chrome.runtime.getURL(href);
+    document.head.appendChild(link);
+  }
+
+  function loadVendorDirect(file) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = chrome.runtime.getURL(file);
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Failed to load " + file));
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadVendorViaBackground(name) {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({ type: "loadVendor", name }, (resp) => {
+          const err = chrome.runtime.lastError;
+          if (err) { reject(new Error(err.message)); return; }
+          if (!resp || !resp.ok) {
+            reject(new Error((resp && resp.error) || "Vendor load failed: " + name));
+            return;
+          }
+          resolve();
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  function ensureVendor(name) {
+    const spec = VENDOR_SPECS[name];
+    if (!spec) return Promise.reject(new Error("unknown vendor: " + name));
+    if (spec.css) injectVendorCss(spec.css); // CSS is idempotent & cheap
+    if (spec.ready()) return Promise.resolve();
+    if (vendorPromises[name]) return vendorPromises[name];
+    const load = location.protocol === "chrome-extension:"
+      ? spec.files.reduce(
+        (p, f) => p.then(() => loadVendorDirect(f)), Promise.resolve())
+      : loadVendorViaBackground(name);
+    vendorPromises[name] = load.then(() => {
+      if (!spec.ready()) {
+        throw new Error(name + " loaded but its global is undefined");
+      }
+    }).catch((err) => {
+      vendorPromises[name] = null; // allow retry on next render
+      throw err;
+    });
+    return vendorPromises[name];
+  }
+
+  // Cheap source sniffing — false positives just cost an unnecessary load,
+  // false negatives would break rendering, so err on the loose side.
+  function sourceNeedsHljs(src) {
+    return /(^|\n)\s*(```|~~~)/.test(src);
+  }
+  function sourceNeedsKatex(src) {
+    return src.includes("$") || src.includes("\\(") || src.includes("\\[");
+  }
+
   /**
    * Render markdown source into a DOM tree (already attached to `mountEl`).
    * @param {string} source markdown text
@@ -290,49 +387,68 @@
     const fmRaw = fmMatch ? fmMatch[1] : null;
     const stripped = fmMatch ? source.slice(fmMatch[0].length) : source;
     const wasExpanded = mountEl.dataset.bswFmExpanded === "1";
+
+    // Pull in heavyweight vendors BEFORE the synchronous marked.parse —
+    // the code renderer needs root.hljs in place. Load failures degrade
+    // gracefully (plain code blocks / raw TeX), never block the render.
+    const vendorWaits = [];
+    if (sourceNeedsHljs(stripped)) {
+      vendorWaits.push(ensureVendor("hljs").catch((e) =>
+        console.warn("[Baseline] hljs lazy-load failed:", e)));
+    }
+    if (sourceNeedsKatex(stripped)) {
+      vendorWaits.push(ensureVendor("katex").catch((e) =>
+        console.warn("[Baseline] KaTeX lazy-load failed:", e)));
+    }
+    if (vendorWaits.length) await Promise.all(vendorWaits);
+
     let rawHtml;
     try {
       rawHtml = marked.parse(stripped);
+      const clean = DOMPurify.sanitize(rawHtml, PURIFY_OPTS);
+      mountEl.innerHTML = clean;
+
+      if (fmRaw) {
+        const entries = parseFrontmatter(fmRaw);
+        if (entries.length) {
+          const fmNode = buildFrontmatterDOM(entries);
+          if (wasExpanded) {
+            fmNode.classList.remove("is-collapsed");
+            fmNode.querySelector(".bsw-fm-heading")
+              .setAttribute("aria-expanded", "true");
+          }
+          mountEl.insertBefore(fmNode, mountEl.firstChild);
+        }
+      }
+      if (!mountEl.dataset.bswFmDelegated) {
+        mountEl.dataset.bswFmDelegated = "1";
+        mountEl.addEventListener("click", handleFmToggle);
+        mountEl.addEventListener("keydown", handleFmKeydown);
+      }
+
+      // Resolve relative images while renderBaseUrl is still set.
+      resolveImageUrls(mountEl);
+      applyRtlDirection(mountEl);
     } finally {
       renderBaseUrl = "";
     }
-    const clean = DOMPurify.sanitize(rawHtml, PURIFY_OPTS);
-    mountEl.innerHTML = clean;
 
-    if (fmRaw) {
-      const entries = parseFrontmatter(fmRaw);
-      if (entries.length) {
-        const fmNode = buildFrontmatterDOM(entries);
-        if (wasExpanded) {
-          fmNode.classList.remove("is-collapsed");
-          fmNode.querySelector(".bsw-fm-heading")
-            .setAttribute("aria-expanded", "true");
-        }
-        mountEl.insertBefore(fmNode, mountEl.firstChild);
+    // KaTeX: render after DOM injection. Lazy-loaded above; absent only
+    // when the doc has no math or the load failed (raw TeX stays visible).
+    if (typeof root.renderMathInElement === "function") {
+      try {
+        root.renderMathInElement(mountEl, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+            { left: "\\[", right: "\\]", display: true }
+          ],
+          throwOnError: false
+        });
+      } catch (e) {
+        console.warn("[Baseline] KaTeX render failed:", e);
       }
-    }
-    if (!mountEl.dataset.bswFmDelegated) {
-      mountEl.dataset.bswFmDelegated = "1";
-      mountEl.addEventListener("click", handleFmToggle);
-      mountEl.addEventListener("keydown", handleFmKeydown);
-    }
-
-    resolveImageUrls(mountEl);
-    applyRtlDirection(mountEl);
-
-    // KaTeX: render after DOM injection.
-    try {
-      renderMathInElement(mountEl, {
-        delimiters: [
-          { left: "$$", right: "$$", display: true },
-          { left: "$", right: "$", display: false },
-          { left: "\\(", right: "\\)", display: false },
-          { left: "\\[", right: "\\]", display: true }
-        ],
-        throwOnError: false
-      });
-    } catch (e) {
-      console.warn("[Baseline] KaTeX render failed:", e);
     }
 
     // Mermaid: cache each block's original source so we can re-render on
@@ -543,6 +659,52 @@
     });
   }
 
+  // A column whose longest cell stays under this many display units reads as
+  // a short field (status, size, date, count) rather than prose. CJK counts
+  // double because those glyphs are roughly twice as wide as Latin ones.
+  const TIGHT_COLUMN_MAX_UNITS = 12;
+  const CJK_CHAR =
+    /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/;
+
+  function cellWidthUnits(cell) {
+    const text = (cell.textContent || "").trim();
+    let units = 0;
+    for (const ch of text) units += CJK_CHAR.test(ch) ? 2 : 1;
+    return units;
+  }
+
+  // CSS can't tell a "48px" column from a paragraph column, so measure each
+  // column's longest cell and mark the uniformly-short ones nowrap. Under
+  // table-layout: auto a nowrap column has max-content == min-content, so the
+  // browser hands all the slack to the prose columns instead of breaking
+  // "48px" across two lines in a narrow reading measure.
+  function markTightColumns(table) {
+    const rows = table.querySelectorAll("tr");
+    if (!rows.length) return;
+    const widest = [];
+    for (const row of rows) {
+      const cells = row.children;
+      if (cells.length > widest.length) widest.length = cells.length;
+      for (let i = 0; i < cells.length; i++) {
+        // colspan breaks the one-cell-per-column model this relies on.
+        if (cells[i].colSpan > 1) return;
+        widest[i] = Math.max(widest[i] || 0, cellWidthUnits(cells[i]));
+      }
+    }
+    if (widest.length < 2) return;
+    for (const row of rows) {
+      const cells = row.children;
+      for (let i = 0; i < cells.length; i++) {
+        // toggle, not add — streaming re-renders can revisit a table whose
+        // column widths changed as later rows arrived.
+        cells[i].classList.toggle(
+          "bsw-col-tight",
+          widest[i] <= TIGHT_COLUMN_MAX_UNITS
+        );
+      }
+    }
+  }
+
   // Wrap each <table> in a horizontally scrollable div so wide tables
   // (many columns or long unbreakable cell content) don't push the page
   // into horizontal scroll. The wrapper owns the rounded border + clipping
@@ -550,6 +712,7 @@
   function wrapTables(mountEl) {
     const tables = mountEl.querySelectorAll("table");
     for (const table of tables) {
+      markTightColumns(table);
       const parent = table.parentNode;
       if (!parent) continue;
       if (parent.classList && parent.classList.contains("bsw-table-wrap")) continue;
@@ -696,61 +859,74 @@
     }
   }
 
+  function cycleTaskListItem(li) {
+    const cb =
+      li.querySelector(':scope > input[type="checkbox"]') ||
+      li.querySelector(':scope > p:first-child > input[type="checkbox"]');
+    if (!cb) return;
+    const cur = li.dataset.bswTask || "todo";
+    const next = TASK_STATES[(TASK_STATES.indexOf(cur) + 1) % TASK_STATES.length];
+    applyTaskState(li, cb, next);
+  }
+
   function injectTaskCheckboxes(mountEl) {
     promoteCancelledItems(mountEl);
 
-    const boxes = mountEl.querySelectorAll('li > input[type="checkbox"]');
-    if (!boxes.length) return;
-    installTaskIconAssets(mountEl);
+    // marked puts the box as a direct child for tight lists, or inside the
+    // first <p> for loose lists — accept both.
+    const boxes = mountEl.querySelectorAll(
+      'li > input[type="checkbox"], li > p:first-child > input[type="checkbox"]'
+    );
+    if (boxes.length) installTaskIconAssets(mountEl);
 
     for (const cb of boxes) {
-      const li = cb.parentElement;
+      const li = cb.closest("li");
       if (!li) continue;
 
       li.classList.add("task-list-item");
       if (li.parentElement) li.parentElement.classList.add("contains-task-list");
 
       cb.disabled = false;
+      cb.removeAttribute("disabled");
       const initial = li.dataset.bswTask || (cb.checked ? "done" : "todo");
       applyTaskState(li, cb, initial);
-
-      // Avoid stacking listeners on re-renders.
-      if (cb.dataset.bswTaskBound) continue;
-      cb.dataset.bswTaskBound = "1";
-
-      function cycleState() {
-        const cur = li.dataset.bswTask || "todo";
-        const next = TASK_STATES[(TASK_STATES.indexOf(cur) + 1) % TASK_STATES.length];
-        applyTaskState(li, cb, next);
-      }
-
-      cb.addEventListener("click", (e) => {
-        // We own the state machine — block the native two-state toggle and
-        // any bubbling to the fold toggle / surrounding links.
-        e.preventDefault();
-        e.stopPropagation();
-        cycleState();
-      });
-
-      // Whole-LI click also cycles the state, so the entire row is a hot
-      // zone. Skip interactive descendants (links, code, nested inputs) and
-      // route nested task clicks to their own LI only.
-      if (!li.dataset.bswTaskLiBound) {
-        li.dataset.bswTaskLiBound = "1";
-        li.addEventListener("click", (e) => {
-          if (e.target === cb) return; // checkbox handler already ran
-          if (e.target.closest(
-            "a, input, button, label, code, pre, textarea, select, [contenteditable=\"true\"]"
-          )) return;
-          // Nested task: let the inner LI handle it.
-          if (e.target.closest(".task-list-item") !== li) return;
-          // User is selecting text — don't hijack.
-          const sel = window.getSelection && window.getSelection();
-          if (sel && sel.toString().length > 0) return;
-          cycleState();
-        });
-      }
     }
+
+    // One delegated listener on the mount: whole-row clicks (and the
+    // checkbox) cycle state. Survives re-renders; avoids per-LI bind drift.
+    // Attach even when this render has no tasks (empty → load with tasks).
+    if (mountEl.dataset.bswTaskDelegated) return;
+    mountEl.dataset.bswTaskDelegated = "1";
+    mountEl.addEventListener("click", (e) => {
+      const li = e.target && e.target.closest && e.target.closest("li.task-list-item");
+      if (!li || !mountEl.contains(li)) return;
+      // Innermost task row only (nested lists).
+      if (e.target.closest("li.task-list-item") !== li) return;
+      // Leave real controls alone. NOTE: the reading sizer is marked
+      // contenteditable (paste host) — must NOT treat that as a skip, or
+      // every task click would no-op.
+      if (e.target.closest("a[href], button, label, textarea, select")) return;
+      const editable = e.target.closest("[contenteditable=\"true\"]");
+      if (editable && editable.getAttribute("data-bsw-paste-host") !== "1") return;
+      if (e.target.closest("code, pre") && !e.target.closest('input[type="checkbox"]')) {
+        return;
+      }
+      // Only skip when the user dragged a range selection inside this row.
+      const sel = window.getSelection && window.getSelection();
+      if (
+        sel &&
+        !sel.isCollapsed &&
+        String(sel).length > 0 &&
+        sel.anchorNode &&
+        li.contains(sel.anchorNode)
+      ) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      cycleTaskListItem(li);
+    });
   }
 
   // ── Frontmatter toggle ───────────────────────────────────────────

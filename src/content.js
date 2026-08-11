@@ -71,7 +71,8 @@
   }
 
   function prepareSettings(settings) {
-    if (settings.width === "split") settings.width = "standard";
+    // bilingual is viewer-only; keep remembered standard/wide/full/split.
+    if (settings.width === "bilingual") settings.width = "standard";
     return settings;
   }
 
@@ -113,9 +114,9 @@
         markdown: source,
         fileName: fileNameFromPageUrl(),
         // file:// pages are "opened locally" (double-clicked from Finder,
-        // dropped on Chrome, etc.). Web-served markdown is not — keep its
-        // Download button visible from the start so users can save the
-        // remote copy without editing first.
+        // dropped on Chrome, etc.). Note: without a FileSystemFileHandle the
+        // Save button still shows (Save As / download); fromLocalFile only
+        // affects legacy origin markers used elsewhere.
         fromLocalFile: location.protocol === "file:"
       },
       pickLabel: "Open Markdown file",

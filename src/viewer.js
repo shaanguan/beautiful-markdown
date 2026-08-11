@@ -33,6 +33,8 @@
     CUSTOM_PREFIX,
     getCustomPresets,
     setCustomPresets,
+    getReadingPrefs,
+    saveReadingPrefs,
     loadPreset,
     makeCustomId,
     projectCustom,
@@ -332,7 +334,8 @@
     var editorialCacheKey = params.get("cacheKey") || "";
     var editorialMode = params.get("edMode") || "slides";
 
-    const settings = Object.assign({}, DEFAULT_SETTINGS);
+    const savedPrefs = await getReadingPrefs();
+    const settings = Object.assign({}, DEFAULT_SETTINGS, savedPrefs);
     // Support initial preset (e.g. claude) passed from surface via registerAndOpen payload
     const urlPreset = params.get("preset");
     if (urlPreset) settings.preset = urlPreset;
@@ -343,6 +346,8 @@
     const presetKnown =
       builtIn.has(settings.preset) || customIds.has(settings.preset);
     if (!presetKnown) settings.preset = "default";
+    // split is .md-only; unknown widths fall back to standard.
+    if (!WIDTH_VALUES.has(settings.width)) settings.width = "standard";
 
     let activePreset = settings.preset;  // single source per strategy, init once
 
@@ -360,26 +365,42 @@
     let rightChromeHandle = null;
     let rightDirty = false;
     let rightFromLocalFile = false;
+    let rightFileHandle = null;
 
-    function refreshRightDownloadVisibility() {
-      const visible = !rightFromLocalFile || rightDirty;
+    function refreshRightSaveVisibility() {
+      // Hide only when a live handle exists and content matches disk.
+      const visible = !rightFileHandle || rightDirty;
       Promise.resolve(rightChromeHandle).then((h) => {
-        if (h && typeof h.setDownloadVisible === "function") h.setDownloadVisible(visible);
+        if (!h) return;
+        if (typeof h.setSaveVisible === "function") h.setSaveVisible(visible);
+        else if (typeof h.setDownloadVisible === "function") h.setDownloadVisible(visible);
       });
     }
 
-    function downloadRightMarkdown() {
+    async function saveRightMarkdown() {
       const shared = window.BaselineShared;
-      if (!shared || typeof shared.downloadMarkdown !== "function") {
-        return Promise.reject(new Error("downloadMarkdown unavailable"));
+      if (!shared || typeof shared.saveMarkdownSmart !== "function") {
+        throw new Error("saveMarkdownSmart unavailable");
       }
       const name = rightFileName || sourceName || "untitled.md";
-      return Promise.resolve(shared.downloadMarkdown(rightMarkdown || lastText || "", name))
-        .then(() => {
-          rightDirty = false;
-          rightFromLocalFile = true;
-          refreshRightDownloadVisibility();
-        });
+      const result = await shared.saveMarkdownSmart({
+        handle: rightFileHandle,
+        text: rightMarkdown || lastText || "",
+        suggestedName: name
+      });
+      if (result && result.handle) {
+        rightFileHandle = result.handle;
+        if (typeof shared.recordRecentHandle === "function") {
+          shared.recordRecentHandle(result.handle, result.name || name).catch(() => {});
+        }
+      }
+      if (result && result.name && result.mode === "saveas") {
+        rightFileName = result.name;
+      }
+      rightDirty = false;
+      rightFromLocalFile = !!(rightFileHandle || (result && result.mode === "download"));
+      refreshRightSaveVisibility();
+      return result;
     }
 
     // ── Bilingual (双栏对照); swap/paste → BaselineSurface (plain .md) ─
@@ -619,6 +640,14 @@
     // Shared by toolbar width buttons and (legacy) switcher callback so
     // both entry points produce identical state transitions: persist new
     // width, apply layout, toggle bilingual.
+    function persistReadingPrefs() {
+      saveReadingPrefs({
+        preset: activePreset,
+        mode: lastMode,
+        width: lastWidth
+      }).catch(() => { /* extension context invalidated; harmless */ });
+    }
+
     function handleWidthChange(value) {
       lastWidth = value;
       applyWidth(value);
@@ -627,6 +656,7 @@
       if (rightChromeHandle && typeof rightChromeHandle.reconnectSpy === "function") {
         rightChromeHandle.reconnectSpy();
       }
+      persistReadingPrefs();
     }
 
     function mountRightChrome() {
@@ -646,11 +676,12 @@
         editTooltip: "Edit in new tab",
         onSwap: () => rightFileInput.click(),
         swapTooltip: "Open another",
-        onDownload: downloadRightMarkdown,
-        downloadTooltip: "下载",
-        downloadDoneText: "Downloaded",
+        onSave: () => saveRightMarkdown(),
+        saveTooltip: "保存",
+        saveDoneText: "已保存",
+        saveDownloadText: "已下载",
         isDirty: rightDirty,
-        hideDownload: rightFromLocalFile && !rightDirty,
+        hideSave: !!rightFileHandle && !rightDirty,
         withTOC: !bilingualOn,
         widthOptions: WIDTH_OPTIONS_VIEWER,
         currentWidth: lastWidth,
@@ -933,16 +964,16 @@
       syncPasteRegistry();
     }
 
+    let lastMode = settings.mode;
+    let lastWidth = settings.width;
+
     applyMode(settings.mode);
-    applyWidth("standard");
+    applyWidth(lastWidth);
     await commitPresetTypography(state.mountEl, activePreset, (p) => applyPreset(p));
     syncPasteRegistry();
 
-    let lastMode = settings.mode;
-    let lastWidth = "standard";
-
     const switcher = window.BaselineSwitcher.mount({
-      initial: { preset: activePreset, mode: settings.mode, width: "standard" },
+      initial: { preset: activePreset, mode: settings.mode, width: lastWidth },
       customPresets: projectCustom(customPresets),
       // Viewer tabs never offer Translate again — only .md / open.html do.
       translateMode: "hidden",
@@ -953,10 +984,12 @@
         if (bilingualOn && leftMountEl) {
           reassertTypographyLock(leftMountEl, value);
         }
+        persistReadingPrefs();
       },
       onModeChange: (value) => {
         lastMode = value;
         applyMode(value);
+        persistReadingPrefs();
       },
       onWidthChange: handleWidthChange,
       onImportPreset: async (name, json) => {
@@ -980,11 +1013,22 @@
             reassertTypographyLock(leftMountEl, "default");
           }
           switcher.setPreset("default");
+          persistReadingPrefs();
         }
       },
     });
     switcherRef = switcher;
     switcher.setColorScheme(state.mode);
+
+    // applyWidth("bilingual") only adds a class; the two-pane layout needs
+    // enableBilingual after chrome exists (mirrors split restore on .md).
+    if (lastWidth === "bilingual") {
+      enableBilingual();
+      if (rightChromeHandle && typeof rightChromeHandle.setActiveWidth === "function") {
+        rightChromeHandle.setActiveWidth("bilingual");
+      }
+      switcher.setWidth("bilingual");
+    }
 
     schemeMq = window.matchMedia("(prefers-color-scheme: dark)");
     onSchemeChange = () => {
@@ -1007,6 +1051,7 @@
             reassertTypographyLock(leftMountEl, "default");
           }
           switcher.setPreset("default");
+          persistReadingPrefs();
         } else {
           await commitPresetTypography(state.mountEl, activePreset, (p) => applyPreset(p));
           if (bilingualOn && leftMountEl) {

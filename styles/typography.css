@@ -133,7 +133,8 @@ html .app-container .markdown-preview-view.markdown-rendered {
   --bsw-theme-quote-text: color-mix(in srgb, var(--text-normal, #2f333a) 62%, transparent);
   --bsw-theme-code-surface: var(--bsw-code-block-surface);
   --bsw-theme-component-radius: 6px;
-  --bsw-theme-marker-color: color-mix(in srgb, var(--text-normal, #2f333a) 62%, transparent);
+  /* One step lighter than body — same tier as --text-muted. */
+  --bsw-theme-marker-color: var(--text-muted, #747d8a);
   --bsw-theme-table-head-line: var(--bsw-component-border-strong);
   --bsw-theme-table-row-line: var(--bsw-component-border);
   --bsw-theme-rule-color: var(--bsw-component-border);
@@ -182,7 +183,44 @@ html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdo
   --bsw-theme-code-surface: color-mix(in srgb, var(--text-normal) 6%, var(--background-primary));
   --bsw-theme-component-radius: 8px;
   --bsw-theme-table-head-line: color-mix(in srgb, var(--text-normal) 24%, transparent);
+  /* Colorful headings — one Adwaita hue per level (red → purple), reusing
+   * the --color-*-rgb tokens the preset already declares for both modes.
+   * Mixed with --text-normal (not a fixed white/black) so the tint stays
+   * legible in both light and dark without a separate per-mode override. */
+  --bsw-stone-h1-color: color-mix(in srgb, rgb(var(--color-red-rgb)) 70%, var(--text-normal));
+  --bsw-stone-h2-color: color-mix(in srgb, rgb(var(--color-orange-rgb)) 70%, var(--text-normal));
+  --bsw-stone-h3-color: color-mix(in srgb, rgb(var(--color-yellow-rgb)) 65%, var(--text-normal));
+  --bsw-stone-h4-color: color-mix(in srgb, rgb(var(--color-green-rgb)) 70%, var(--text-normal));
+  --bsw-stone-h5-color: color-mix(in srgb, rgb(var(--color-blue-rgb)) 70%, var(--text-normal));
+  --bsw-stone-h6-color: color-mix(in srgb, rgb(var(--color-purple-rgb)) 70%, var(--text-normal));
 }
+html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdown-rendered h1 {
+  color: var(--bsw-stone-h1-color) !important;
+}
+html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdown-rendered h2 {
+  color: var(--bsw-stone-h2-color) !important;
+}
+html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdown-rendered h3 {
+  color: var(--bsw-stone-h3-color) !important;
+}
+html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdown-rendered h4 {
+  color: var(--bsw-stone-h4-color) !important;
+}
+html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdown-rendered h5 {
+  color: var(--bsw-stone-h5-color) !important;
+}
+html[data-bsw-preset="stone-gnome"] .app-container .markdown-preview-view.markdown-rendered h6 {
+  color: var(--bsw-stone-h6-color) !important;
+}
+/* Heading anchor (# link) and fold chevron inherit the plain text color by
+ * default; recolor them to match so they don't look disconnected from a
+ * colorful heading. */
+html[data-bsw-preset="stone-gnome"] .markdown-rendered h1 .bsw-heading-anchor { color: var(--bsw-stone-h1-color) !important; }
+html[data-bsw-preset="stone-gnome"] .markdown-rendered h2 .bsw-heading-anchor { color: var(--bsw-stone-h2-color) !important; }
+html[data-bsw-preset="stone-gnome"] .markdown-rendered h3 .bsw-heading-anchor { color: var(--bsw-stone-h3-color) !important; }
+html[data-bsw-preset="stone-gnome"] .markdown-rendered h4 .bsw-heading-anchor { color: var(--bsw-stone-h4-color) !important; }
+html[data-bsw-preset="stone-gnome"] .markdown-rendered h5 .bsw-heading-anchor { color: var(--bsw-stone-h5-color) !important; }
+html[data-bsw-preset="stone-gnome"] .markdown-rendered h6 .bsw-heading-anchor { color: var(--bsw-stone-h6-color) !important; }
 
 /* Product-fixed reading defaults. Theme files may replace expression tokens,
  * but never the column width, base size or document flow. */
@@ -296,20 +334,29 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
   margin-top: var(--bsw-typography-list-item-spacing) !important;
 }
 
-/* Task rows are prose list items, not vertically padded cards. Keep a small
- * hover target without doubling the normal list rhythm. */
+/* Task rows share the same list indent as ul/ol (see shared rules below). */
 html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered ul.contains-task-list {
   margin-block: var(--bsw-typography-list-spacing) !important;
-  padding-left: 0 !important;
+  padding-left: var(--bsw-typography-list-indent) !important;
 }
 
 html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered li.task-list-item {
-  min-height: 0 !important;
+  display: block !important;
+  /* auto width compensates for negative margin so the hit box spans the row */
+  width: auto !important;
+  min-height: 1.5em !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
   margin-top: var(--bsw-typography-list-item-spacing) !important;
-  margin-right: -0.5em !important;
+  margin-right: 0 !important;
   margin-bottom: 0 !important;
-  margin-left: -0.5em !important;
-  padding: var(--bsw-typography-task-padding-block) 0.5em var(--bsw-typography-task-padding-block) 2em !important;
+  margin-left: calc(-1 * var(--bsw-task-gutter, var(--bsw-typography-list-indent))) !important;
+  padding-top: var(--bsw-typography-task-padding-block) !important;
+  padding-right: 0.35em !important;
+  padding-bottom: var(--bsw-typography-task-padding-block) !important;
+  padding-left: var(--bsw-task-gutter, var(--bsw-typography-list-indent)) !important;
+  text-indent: 0 !important;
   line-height: var(--bsw-typography-line-height) !important;
 }
 
@@ -464,33 +511,52 @@ html .app-container .markdown-preview-view.markdown-rendered h6 {
   line-height: var(--bsw-typography-h3-line-height) !important;
   margin: var(--bsw-typography-h6-margin-top) 0 var(--bsw-typography-h6-margin-bottom) !important;
 }
-html .app-container .markdown-preview-view.markdown-rendered :is(ul,ol) {
+/* All list types share one content indent so prose starts on one edge.
+ * Markers (disc / number / checkbox) sit in the gutter to the left. */
+html .app-container .markdown-preview-view.markdown-rendered :is(ul, ol) {
   margin-block: var(--bsw-typography-list-spacing) !important;
   margin-inline: 0 !important;
   padding-left: var(--bsw-typography-list-indent) !important;
+  list-style-position: outside !important;
 }
-html .app-container .markdown-preview-view.markdown-rendered li > :is(ul,ol) {
+html .app-container .markdown-preview-view.markdown-rendered li > :is(ul, ol) {
   margin-block: var(--bsw-typography-nested-list-spacing) !important;
   padding-left: var(--bsw-typography-nested-list-indent) !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered ol > li::marker {
   color: var(--bsw-theme-marker-color) !important;
   font-family: inherit !important;
-  font-size: 0.875em !important;
-  font-weight: 400 !important;
+  font-size: 1em !important;
+  font-weight: 500 !important;
   font-variant-numeric: tabular-nums !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered li + li {
   margin-top: var(--bsw-typography-list-item-spacing) !important;
 }
+/* Task lists use the same indent as ul/ol (not padding-left: 0). */
 html .app-container .markdown-preview-view.markdown-rendered ul.contains-task-list {
   margin-block: var(--bsw-typography-list-spacing) !important;
-  padding-left: 0 !important;
+  padding-left: var(--bsw-typography-list-indent) !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered li.task-list-item {
-  min-height: 0 !important;
-  margin: var(--bsw-typography-list-item-spacing) -0.5em 0 !important;
-  padding: var(--bsw-typography-task-padding-block) 0.5em var(--bsw-typography-task-padding-block) 2em !important;
+  display: block !important;
+  /* auto width compensates for negative margin so the hit box spans the row */
+  width: auto !important;
+  min-height: 1.5em !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  /* Full-row hit area: expand into marker gutter, pad text back into place.
+   * --bsw-task-gutter is set on the parent task <ul> (nested lists override). */
+  margin-top: var(--bsw-typography-list-item-spacing) !important;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+  margin-left: calc(-1 * var(--bsw-task-gutter, var(--bsw-typography-list-indent))) !important;
+  padding-top: var(--bsw-typography-task-padding-block) !important;
+  padding-right: 0.35em !important;
+  padding-bottom: var(--bsw-typography-task-padding-block) !important;
+  padding-left: var(--bsw-task-gutter, var(--bsw-typography-list-indent)) !important;
+  text-indent: 0 !important;
   line-height: var(--bsw-typography-line-height) !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered li.task-list-item:first-child {
@@ -571,6 +637,14 @@ html .app-container .markdown-preview-view.markdown-rendered table > tbody > tr:
 html .app-container .markdown-preview-view.markdown-rendered table :is(th,td) {
   border-inline: 0 !important;
 }
+/* Short-field columns tagged by renderer.js → markTightColumns. Keeping them
+ * on one line lets auto layout spend the slack on the prose columns instead
+ * of wrapping a two-word label in a narrow reading measure. Cap the run so a
+ * misjudged column can never push the table wider than the scroll wrapper. */
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td).bsw-col-tight {
+  white-space: nowrap !important;
+  max-width: 14em !important;
+}
 html .app-container .markdown-preview-view.markdown-rendered hr {
   margin-block: var(--bsw-typography-rule-margin) !important;
   height: 0 !important;
@@ -629,4 +703,146 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
   .hljs-comment, .hljs-quote
 ) {
   color: var(--code-comment) !important;
+}
+
+/* ────────────────────────────────────────────────────────────────
+ * Preset differentiation — "reading first, distinct identity".
+ * The geometry contract above stays untouched; each preset gets one
+ * memorable expression axis. Placed last so ties on !important
+ * resolve to these rules.
+ *
+ *   Vibe    → editorial whitespace: Kaiti pull-quotes, short centered rule
+ *   Claude  → serif headings + cream paper (owned by claude-preset.css)
+ *   Minimal → density: weight-driven headings, tight tables, bare code
+ *   Stone   → structure: colorful heading ladder (block further up)
+ *   Paper   → book: serif body (font set in presets/paper.json)
+ * ──────────────────────────────────────────────────────────────── */
+
+/* ── Vibe (default) — Chinese editorial ── */
+/* Trim fullwidth punctuation at line starts (Chrome 123+; safe no-op elsewhere). */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered {
+  text-spacing-trim: trim-start;
+}
+/* Pull-quote voice: Kaiti for CJK, Georgia for Latin. Expression only —
+ * the quote's spacing/border geometry stays on the shared contract. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered blockquote {
+  font-family: Georgia, "Kaiti SC", "STKaiti", "KaiTi", serif !important;
+  letter-spacing: 0.01em !important;
+}
+/* Editorial rule: short centered dash instead of a full-column hairline. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered hr {
+  width: 72px !important;
+  margin-inline: auto !important;
+  border-top-width: 2px !important;
+  border-radius: 1px !important;
+}
+
+/* ── Minimal — density and restraint ── */
+html[data-bsw-preset="minimal"] .app-container .markdown-preview-view.markdown-rendered {
+  /* Headings differ by weight, not size: the scale flattens toward the
+   * body size so long technical notes read as one dense column. */
+  --bsw-typography-h1-size: 1.375rem;
+  --bsw-typography-h2-size: 1.125rem;
+  --bsw-typography-h3-size: 1rem;
+  --bsw-typography-h4-size: 1rem;
+  --bsw-typography-h5-h6-size: 0.875rem;
+  --bsw-typography-h6-size: 0.875rem;
+  --bsw-typography-h1-weight: 700;
+  --bsw-typography-h2-weight: 700;
+  --bsw-typography-h3-weight: 600;
+  --bsw-typography-h4-weight: 600;
+  --bsw-typography-h5-weight: 600;
+  --bsw-typography-h6-weight: 600;
+  --bsw-typography-table-size: 0.8125em;
+  /* Bare code: no surface fill, hairline outline (rule below). */
+  --bsw-theme-code-surface: transparent;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered table :is(th,td) {
+  padding: 0.35em 0.5em !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered pre:not(.mermaid) {
+  border: 1px solid color-mix(in srgb, var(--text-normal) 16%, transparent) !important;
+}
+
+/* ── Paper — immersive book reading ── */
+html[data-bsw-preset="paper"] .app-container .markdown-preview-view.markdown-rendered {
+  /* Book-like heading scale: modest sizes, calm weights; the serif body
+   * itself (from paper.json --font-text) carries the identity. */
+  --bsw-typography-h1-size: 2rem;
+  --bsw-typography-h2-size: 1.5rem;
+  --bsw-typography-h3-size: 1.25rem;
+  --bsw-typography-h4-size: 1.0625rem;
+  --bsw-typography-h5-h6-size: 1rem;
+  --bsw-typography-h6-size: 1rem;
+  --bsw-typography-h1-weight: 400;
+  --bsw-typography-h2-weight: 500;
+  --bsw-typography-h3-weight: 500;
+  --bsw-typography-h4-weight: 600;
+  --bsw-typography-h5-weight: 600;
+  --bsw-typography-h6-weight: 600;
+  --bsw-typography-h1-line-height: 1.3;
+  --bsw-typography-h2-line-height: 1.35;
+  --bsw-theme-quote-rule-width: 2px;
+  --bsw-quote-rule-color: color-mix(in srgb, var(--interactive-accent, #8A6D46) 55%, transparent);
+  /* Shared warm panel for code + tables on the 米白纸面. */
+  --bsw-theme-panel-surface: var(--code-background, #F3EAD6);
+  --bsw-theme-code-surface: var(--bsw-theme-panel-surface);
+  --bsw-theme-panel-edge: color-mix(in srgb, var(--interactive-accent, #8A6D46) 24%, transparent);
+  --bsw-theme-component-radius: 6px;
+  --bsw-theme-table-head-line: color-mix(in srgb, var(--text-normal) 22%, transparent);
+  --bsw-theme-table-row-line: color-mix(in srgb, var(--text-normal) 12%, transparent);
+}
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered {
+  --bsw-theme-panel-surface: var(--code-background, #2C2823);
+  --bsw-theme-code-surface: var(--bsw-theme-panel-surface);
+  --bsw-theme-panel-edge: color-mix(in srgb, var(--interactive-accent, #C2A478) 28%, transparent);
+}
+/* Book rule: short centered dash, same editorial gesture as Vibe. */
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered hr {
+  width: 72px !important;
+  margin-inline: auto !important;
+}
+/* Code + table: same warm ivory panel and sepia edge. */
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered pre {
+  border: 1px solid var(--bsw-theme-panel-edge) !important;
+  border-radius: var(--bsw-theme-component-radius, 6px) !important;
+  background: var(--bsw-theme-panel-surface) !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered :not(pre) > code {
+  background: var(--bsw-theme-panel-surface) !important;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent, #8A6D46) 18%, transparent) !important;
+  border-radius: 4px !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+  border: 1px solid var(--bsw-theme-panel-edge) !important;
+  border-radius: var(--bsw-theme-component-radius, 6px) !important;
+  background: var(--bsw-theme-panel-surface) !important;
+  padding: 0.15em 0.25em !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered table :is(th, td) {
+  background: transparent !important;
+}
+/* Paper — baked @paper-design/shaders PaperTexture as CSS background.
+ * Empty homepage (.bsw-open-empty) never gets a layer. */
+html[data-bsw-preset="paper"] .markdown-reading-view {
+  position: relative;
+  background-color: var(--background-primary);
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: 100% 100%;
+}
+.bsw-paper-noise {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: 100% 100%;
+}
+html[data-bsw-preset="paper"] .markdown-reading-view:has(> .bsw-paper-noise) > :not(.bsw-paper-noise) {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
 }

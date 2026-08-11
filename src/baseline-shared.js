@@ -11,10 +11,13 @@
  * Exposed as window.BaselineShared; loaded after preset-map.js (it calls
  * window.BaselinePreset at runtime) and before content.js / viewer.js.
  *
- * Storage layout (unchanged):
+ * Storage layout:
  *   chrome.storage.local: { customPresets: [{ id, name, json }, ...] }
+ *   chrome.storage.local: { bswReadingPrefs: { preset, mode, width } }
  *   Custom presets live in local because chrome.storage.sync has an 8KB
  *   per-item limit; a single rich preset can easily exceed that.
+ *   Reading prefs (theme preset / color mode / content width) persist the
+ *   user's last choice across tabs and sessions.
  */
 
 (function (root) {
@@ -50,8 +53,9 @@
     "tool.copy_translation": { en: "Copy translation",        zh: "复制译文" },
     "tool.swap":           { en: "Open another",              zh: "打开其他" },
     "tool.swap_named":     { en: "Open another",              zh: "打开其他" },
-    "tool.download":       { en: "Download",                  zh: "下载" },
-    "tool.download_named": { en: "Download",                  zh: "下载" },
+    "tool.download":       { en: "Save",                      zh: "保存" },
+    "tool.download_named": { en: "Save",                      zh: "保存" },
+    "tool.save":           { en: "Save",                      zh: "保存" },
     "tool.edit":           { en: "Edit in popup",             zh: "在弹出窗口编辑" },
     "edit.undo":           { en: "Undo",                      zh: "撤销" },
     "edit.undo_kbd":       { en: "Undo (⌘Z)",                 zh: "撤销 (⌘Z)" },
@@ -98,6 +102,58 @@
   function setCustomPresets(list) {
     return new Promise((resolve) => {
       chrome.storage.local.set({ customPresets: list }, () => resolve());
+    });
+  }
+
+  // Last-used reading chrome: theme preset, color mode, content width.
+  // Shared by .md surfaces, open.html, and the translation viewer so a
+  // choice in one tab is the default the next time any surface boots.
+  const READING_PREFS_KEY = "bswReadingPrefs";
+  const DEFAULT_READING_PREFS = {
+    preset: "default",
+    mode: "auto",
+    width: "standard"
+  };
+
+  function normalizeReadingPrefs(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const mode = src.mode === "light" || src.mode === "dark" || src.mode === "auto"
+      ? src.mode
+      : DEFAULT_READING_PREFS.mode;
+    const preset = typeof src.preset === "string" && src.preset
+      ? src.preset
+      : DEFAULT_READING_PREFS.preset;
+    const width = typeof src.width === "string" && src.width
+      ? src.width
+      : DEFAULT_READING_PREFS.width;
+    return { preset, mode, width };
+  }
+
+  function getReadingPrefs() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(
+          { [READING_PREFS_KEY]: DEFAULT_READING_PREFS },
+          (items) => {
+            resolve(normalizeReadingPrefs(items && items[READING_PREFS_KEY]));
+          }
+        );
+      } catch (_) {
+        resolve(Object.assign({}, DEFAULT_READING_PREFS));
+      }
+    });
+  }
+
+  // Callers pass the full in-memory triple { preset, mode, width } so a
+  // rapid mode+width change cannot lose a field via get-then-set races.
+  function saveReadingPrefs(prefs) {
+    const next = normalizeReadingPrefs(prefs);
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ [READING_PREFS_KEY]: next }, () => resolve(next));
+      } catch (_) {
+        resolve(next);
+      }
     });
   }
 
@@ -793,11 +849,78 @@
     } catch (_) { /* ignore */ }
   }
 
+  const PAPER_NOISE_LAYER = "bsw-paper-noise";
+
+  function readingViewWantsPaperNoise(view) {
+    if (!view) return false;
+    // Empty open homepage / blank column — keep clean.
+    if (view.querySelector(".bsw-open-empty, .bsw-open-empty-hero")) return false;
+    return true;
+  }
+
+  /**
+   * Mount/remove @paper-design/shaders PaperTexture for the Paper preset.
+   * Bakes a PNG offscreen and paints it as a CSS background (scrolls with text).
+   */
+  function syncPaperNoise(presetName) {
+    const wantPreset = presetName === "paper";
+    const views = document.querySelectorAll(".markdown-reading-view");
+    const dark = document.body.classList.contains("theme-dark");
+    const api = typeof window !== "undefined" ? window.BaselinePaperTexture : null;
+
+    for (const view of views) {
+      const want = wantPreset && readingViewWantsPaperNoise(view);
+      let layer = null;
+      for (const child of view.children) {
+        if (child.classList && child.classList.contains(PAPER_NOISE_LAYER)) {
+          layer = child;
+          break;
+        }
+      }
+      if (!want) {
+        if (layer) {
+          if (api && typeof api.unmountPaperTexture === "function") {
+            api.unmountPaperTexture(layer);
+          }
+          layer.remove();
+        }
+        view.style.removeProperty("background-image");
+        view.style.removeProperty("background-size");
+        view.style.removeProperty("background-repeat");
+        view.style.removeProperty("background-position");
+        continue;
+      }
+      if (!layer) {
+        layer = document.createElement("div");
+        layer.className = PAPER_NOISE_LAYER;
+        layer.setAttribute("aria-hidden", "true");
+        view.insertBefore(layer, view.firstChild);
+      }
+      if (!api || typeof api.mountPaperTexture !== "function") {
+        console.warn("[Baseline] BaselinePaperTexture / PaperShaders missing — reload the extension");
+        continue;
+      }
+      // Skip if this mode already baked successfully (bump when params change).
+      const modeKey = (dark ? "dark" : "light") + ":v8-bright";
+      if (layer.dataset.bswPaperMode === modeKey && layer.dataset.bswPaperReady === "1") {
+        continue;
+      }
+      layer.dataset.bswPaperMode = modeKey;
+      delete layer.dataset.bswPaperReady;
+      Promise.resolve(api.mountPaperTexture(layer, { dark: dark, view: view })).then((ok) => {
+        if (ok === false) {
+          console.warn("[Baseline] PaperTexture bake failed — check WebGL2");
+        }
+      });
+    }
+  }
+
   /** Exposes the active built-in preset to expression-only CSS. */
   function syncPresetMarker(presetName) {
     const rootEl = document.documentElement;
     if (presetName && presetName !== "default") rootEl.setAttribute("data-bsw-preset", presetName);
     else rootEl.removeAttribute("data-bsw-preset");
+    syncPaperNoise(presetName);
   }
 
   // Single source of truth for the CSS custom properties that force/clear manage
@@ -847,6 +970,8 @@
       await applyPresetFn(preset);
     }
     forceTypographyLock(previewEl);
+    // Reading views may have been (re)built during apply; re-sync noise layers.
+    syncPaperNoise(presetName);
   }
 
   /**
@@ -887,6 +1012,8 @@
     }
     return renderer.renderTo(markdown, renderTarget).then(() => {
       reassertTypographyLock(lockTarget, presetName);
+      // Empty homepage ↔ document transitions change whether noise is allowed.
+      syncPaperNoise(presetName);
     });
   }
 
@@ -948,6 +1075,175 @@
 
   function deleteFileHandle(key) {
     return withHandleStore("readwrite", (store) => { store.delete(key); });
+  }
+
+  // ---- Write-back to the original file ------------------------------------
+  // Persists edited markdown to the FileSystemFileHandle the doc was opened
+  // with. Must be called from a user gesture (button click) so
+  // requestPermission can show its prompt when needed.
+  async function writeMarkdownToHandle(handle, text) {
+    if (!handle || typeof handle.createWritable !== "function") {
+      throw new Error("no writable file handle");
+    }
+    let perm = "prompt";
+    try { perm = await handle.queryPermission({ mode: "readwrite" }); }
+    catch (_) { /* older Chrome: fall through to request */ }
+    if (perm !== "granted") {
+      perm = await handle.requestPermission({ mode: "readwrite" });
+    }
+    if (perm !== "granted") {
+      throw new Error("write permission denied");
+    }
+    const writable = await handle.createWritable();
+    await writable.write(text);
+    await writable.close();
+  }
+
+  const SAVE_PICKER_TYPES = [{
+    description: "Markdown",
+    accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"] }
+  }];
+
+  /**
+   * Unified save: write-back → Save As (picker) → download fallback.
+   * Must run from a user gesture (toolbar click) for permission + picker.
+   *
+   * @param {{ handle?: FileSystemFileHandle|null, text: string, suggestedName?: string }} opts
+   * @returns {Promise<{ mode: "writeback"|"saveas"|"download", handle?: FileSystemFileHandle, name?: string }>}
+   */
+  async function saveMarkdownSmart(opts) {
+    const text = (opts && opts.text) != null ? String(opts.text) : "";
+    let suggested = (opts && opts.suggestedName) || "untitled.md";
+    if (!/\.(md|markdown|mdown|mkd)$/i.test(suggested)) {
+      suggested = suggested + ".md";
+    }
+    const handle = opts && opts.handle;
+
+    if (handle && typeof handle.createWritable === "function") {
+      await writeMarkdownToHandle(handle, text);
+      return { mode: "writeback", handle, name: handle.name || suggested };
+    }
+
+    if (typeof window.showSaveFilePicker === "function") {
+      let newHandle;
+      try {
+        newHandle = await window.showSaveFilePicker({
+          suggestedName: suggested,
+          types: SAVE_PICKER_TYPES,
+          excludeAcceptAllOption: false
+        });
+      } catch (e) {
+        if (e && (e.name === "AbortError" || e.code === 20)) {
+          const err = new Error("save cancelled");
+          err.name = "AbortError";
+          throw err;
+        }
+        throw e;
+      }
+      if (!newHandle) throw new Error("no save handle");
+      await writeMarkdownToHandle(newHandle, text);
+      return {
+        mode: "saveas",
+        handle: newHandle,
+        name: newHandle.name || suggested
+      };
+    }
+
+    await downloadMarkdown(text, suggested);
+    return { mode: "download", name: suggested };
+  }
+
+  // ---- Document library -----------------------------------------------------
+  // IndexedDB store for docs that have no reopenable origin (web clips,
+  // pasted content). Unlike recents (10 URL/handle pointers), the library
+  // stores the markdown itself, so entries survive tab and browser restarts.
+  // docs: { id, name, markdown, source: "clip"|"paste", url?, createdAt,
+  //         updatedAt }
+  const LIBRARY_DB_NAME = "baseline-library";
+  const LIBRARY_DB_VERSION = 1;
+  const LIBRARY_STORE = "docs";
+  const LIBRARY_LIMIT = 500;
+
+  function openLibraryDB() {
+    return new Promise((resolve, reject) => {
+      let req;
+      try { req = indexedDB.open(LIBRARY_DB_NAME, LIBRARY_DB_VERSION); }
+      catch (e) { reject(e); return; }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(LIBRARY_STORE)) {
+          db.createObjectStore(LIBRARY_STORE, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function withLibraryStore(mode, fn) {
+    return openLibraryDB().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(LIBRARY_STORE, mode);
+      const store = tx.objectStore(LIBRARY_STORE);
+      let result;
+      try { result = fn(store); }
+      catch (e) { reject(e); return; }
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    }));
+  }
+
+  async function saveLibraryDoc(doc) {
+    const now = Date.now();
+    const record = {
+      id: doc.id || makeRecentId(),
+      name: doc.name || "untitled.md",
+      markdown: doc.markdown || "",
+      source: doc.source || "paste",
+      url: doc.url || "",
+      createdAt: doc.createdAt || now,
+      updatedAt: now
+    };
+    await withLibraryStore("readwrite", (store) => { store.put(record); });
+    trimLibrary().catch(() => {});
+    return record.id;
+  }
+
+  function getLibraryDoc(id) {
+    return openLibraryDB().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(LIBRARY_STORE, "readonly");
+      const req = tx.objectStore(LIBRARY_STORE).get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    }));
+  }
+
+  // Newest first. Full records (markdown included) — docs are text, and the
+  // list doubles as the search corpus, so one read serves both.
+  function getLibraryDocs() {
+    return openLibraryDB().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(LIBRARY_STORE, "readonly");
+      const req = tx.objectStore(LIBRARY_STORE).getAll();
+      req.onsuccess = () => {
+        const list = req.result || [];
+        list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        resolve(list);
+      };
+      req.onerror = () => reject(req.error);
+    }));
+  }
+
+  function removeLibraryDoc(id) {
+    return withLibraryStore("readwrite", (store) => { store.delete(id); });
+  }
+
+  async function trimLibrary() {
+    const list = await getLibraryDocs();
+    if (list.length <= LIBRARY_LIMIT) return;
+    const excess = list.slice(LIBRARY_LIMIT);
+    await withLibraryStore("readwrite", (store) => {
+      for (const doc of excess) store.delete(doc.id);
+    });
   }
 
   function getRecentDocs() {
@@ -1365,8 +1661,12 @@
     loadTabSession,
     clearTabSession,
     syncPresetMarker,
+    syncPaperNoise,
     getCustomPresets,
     setCustomPresets,
+    DEFAULT_READING_PREFS,
+    getReadingPrefs,
+    saveReadingPrefs,
     compileFromJSON,
     emptyPreset,
     loadPreset,
@@ -1394,6 +1694,12 @@
     recordRecentHandle,
     removeRecentDoc,
     readRecentDoc,
+    writeMarkdownToHandle,
+    saveMarkdownSmart,
+    saveLibraryDoc,
+    getLibraryDoc,
+    getLibraryDocs,
+    removeLibraryDoc,
     TYPOGRAPHY_LOCK_VARS,
     clearTypographyLock,
     forceTypographyLock,

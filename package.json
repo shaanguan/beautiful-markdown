@@ -1,0 +1,31 @@
+{
+  "name": "beautiful-markdown-1.7.2",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "bundle:paper-shaders": "node scripts/bundle-paper-shaders.mjs",
+    "bundle:clipper": "node scripts/bundle-clipper.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shaanguan/beautiful-markdown.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/shaanguan/beautiful-markdown/issues"
+  },
+  "homepage": "https://github.com/shaanguan/beautiful-markdown#readme",
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "@paper-design/shaders": "0.0.79",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.0"
+  }
+}

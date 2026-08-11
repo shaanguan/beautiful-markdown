@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beautiful Markdown</title>
-  <link rel="stylesheet" href="vendor/katex.min.css" />
+  <!-- katex.min.css is injected on demand by renderer.js (ensureVendor) -->
   <link rel="stylesheet" href="styles/theme.css" />
   <link rel="stylesheet" href="styles/extension.css" />
   <link rel="stylesheet" href="styles/typography.css" />
@@ -13,10 +13,9 @@
 <body>
   <script src="vendor/marked.min.js"></script>
   <script src="vendor/purify.min.js"></script>
-  <script src="vendor/highlight.min.js"></script>
-  <script src="vendor/katex.min.js"></script>
-  <script src="vendor/katex-auto-render.min.js"></script>
+  <!-- highlight.js / KaTeX / paper-shaders are lazy-loaded on first need -->
   <script src="src/preset-map.js"></script>
+  <script src="src/paper-texture.js"></script>
   <script src="src/baseline-shared.js"></script>
   <script src="src/baseline-surface.js"></script>
   <script src="src/obsidian-syntax.js"></script>

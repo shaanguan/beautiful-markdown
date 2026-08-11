@@ -128,14 +128,139 @@ function registerPasteMenu() {
   }
 }
 
+// ── Web clipper（类 Obsidian Web Clipper）───────────────────────────
+//
+// Right-click any http(s) page →「剪藏」→ inject vendor/clipper.js
+// (Readability + Turndown IIFE) + src/clipper.js, call __bswClip(mode) in
+// the page, stage the resulting markdown in chrome.storage.session, and
+// open it in an open.html tab (?clip=<id>). open.js pops the payload
+// one-shot and renders it like any other markdown document.
+// Menu shape depends on what's under the cursor:
+//   no selection → single top-level item「剪藏整页为 Markdown」(page context)
+//   has selection → parent「剪藏为 Markdown」with a submenu:
+//                     「选中内容」/「整页」(both selection context)
+const CLIP_PAGE_MENU_ID = "bsw-clip-page";           // top-level, page ctx
+const CLIP_PARENT_MENU_ID = "bsw-clip-parent";       // top-level, selection ctx
+const CLIP_SELECTION_MENU_ID = "bsw-clip-selection"; // submenu child
+const CLIP_SUB_PAGE_MENU_ID = "bsw-clip-sub-page";   // submenu child
+const CLIP_STORE_PREFIX = "bswClip:";
+const CLIP_URL_PATTERNS = ["http://*/*", "https://*/*"];
+
+function registerClipMenus() {
+  const swallow = () => void chrome.runtime.lastError;
+  // Children first, then parents — removing a parent also removes its
+  // children, so this order never double-removes. Recreate after ALL
+  // removals settle (children need the parent to exist at create time).
+  const ids = [
+    CLIP_SELECTION_MENU_ID, CLIP_SUB_PAGE_MENU_ID,
+    CLIP_PARENT_MENU_ID, CLIP_PAGE_MENU_ID
+  ];
+  let pending = ids.length;
+  const createAll = () => {
+    chrome.contextMenus.create({
+      id: CLIP_PAGE_MENU_ID,
+      title: "剪藏整页为 Markdown",
+      contexts: ["page"],
+      documentUrlPatterns: CLIP_URL_PATTERNS
+    }, swallow);
+    chrome.contextMenus.create({
+      id: CLIP_PARENT_MENU_ID,
+      title: "剪藏为 Markdown",
+      contexts: ["selection"],
+      documentUrlPatterns: CLIP_URL_PATTERNS
+    }, () => {
+      if (chrome.runtime.lastError) return; // parent failed → skip children
+      chrome.contextMenus.create({
+        id: CLIP_SELECTION_MENU_ID,
+        parentId: CLIP_PARENT_MENU_ID,
+        title: "选中内容",
+        contexts: ["selection"],
+        documentUrlPatterns: CLIP_URL_PATTERNS
+      }, swallow);
+      chrome.contextMenus.create({
+        id: CLIP_SUB_PAGE_MENU_ID,
+        parentId: CLIP_PARENT_MENU_ID,
+        title: "整页",
+        contexts: ["selection"],
+        documentUrlPatterns: CLIP_URL_PATTERNS
+      }, swallow);
+    });
+  };
+  try {
+    for (const id of ids) {
+      chrome.contextMenus.remove(id, () => {
+        swallow();
+        if (--pending === 0) createAll();
+      });
+    }
+  } catch (err) {
+    console.warn("[Baseline] registerClipMenus failed:", err);
+  }
+}
+
+async function handleClipClick(mode, tab) {
+  const tabId = tab.id;
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["vendor/clipper.js", "src/clipper.js"]
+  });
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (m) => (self.__bswClip ? self.__bswClip(m) : null),
+    args: [mode]
+  });
+  const payload = results && results[0] && results[0].result;
+
+  let markdown, name;
+  if (payload && payload.ok) {
+    markdown = payload.markdown;
+    name = payload.name;
+  } else {
+    const reason = (payload && payload.error) || "unknown error";
+    markdown = "# 剪藏失败\n\n> " + reason + "\n\n来源：" + (tab.url || "");
+    name = "clip-failed.md";
+  }
+
+  const clipId = (crypto.randomUUID && crypto.randomUUID()) ||
+    Date.now().toString(36) + Math.random().toString(36).slice(2);
+  await chrome.storage.session.set({
+    [CLIP_STORE_PREFIX + clipId]: {
+      markdown,
+      name,
+      url: (payload && payload.url) || tab.url || "",
+      createdAt: Date.now()
+    }
+  });
+  await chrome.tabs.create({
+    url: chrome.runtime.getURL("open.html?clip=" + clipId),
+    index: tab.index != null ? tab.index + 1 : undefined
+  });
+}
+
 chrome.runtime.onInstalled.addListener(registerPasteMenu);
 chrome.runtime.onStartup.addListener(registerPasteMenu);
+chrome.runtime.onInstalled.addListener(registerClipMenus);
+chrome.runtime.onStartup.addListener(registerClipMenus);
 // Service-worker first-run after browser load may have neither event yet
 // (Chrome lazy-wakes the worker on first message). Idempotent register on
 // top-level eval covers that path.
 registerPasteMenu();
+registerClipMenus();
+
+const CLIP_MENU_MODES = {
+  [CLIP_PAGE_MENU_ID]: "page",
+  [CLIP_SUB_PAGE_MENU_ID]: "page",
+  [CLIP_SELECTION_MENU_ID]: "selection"
+};
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
+  const clipMode = CLIP_MENU_MODES[info.menuItemId];
+  if (clipMode) {
+    if (!tab || tab.id == null) return;
+    handleClipClick(clipMode, tab)
+      .catch((err) => console.warn("[Baseline] clip failed:", err));
+    return;
+  }
   if (info.menuItemId !== PASTE_MENU_ID || !tab || tab.id == null) return;
   chrome.tabs.sendMessage(tab.id, { type: "baselinePasteRequest" })
     .catch((err) => console.warn("[Baseline] paste request failed:", err));
@@ -154,6 +279,33 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.scripting.executeScript({
       target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] },
       files: ["vendor/mermaid.min.js"]
+    }).then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({
+        ok: false,
+        error: (err && err.message) || String(err)
+      }));
+    return true; // async sendResponse
+  }
+  if (msg && msg.type === "loadVendor") {
+    // Generic lazy vendor injection (same mechanics as loadMermaid).
+    // Whitelisted: the renderer must never be able to inject arbitrary files.
+    const VENDOR_FILES = {
+      hljs: ["vendor/highlight.min.js"],
+      katex: ["vendor/katex.min.js", "vendor/katex-auto-render.min.js"],
+      paperShaders: ["vendor/paper-shaders.js"]
+    };
+    const files = VENDOR_FILES[msg.name];
+    if (!files) {
+      sendResponse({ ok: false, error: "unknown vendor: " + msg.name });
+      return;
+    }
+    if (!sender || !sender.tab || sender.tab.id == null) {
+      sendResponse({ ok: false, error: "no sender tab" });
+      return;
+    }
+    chrome.scripting.executeScript({
+      target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] },
+      files
     }).then(() => sendResponse({ ok: true }))
       .catch((err) => sendResponse({
         ok: false,

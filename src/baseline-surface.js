@@ -154,6 +154,8 @@
     CUSTOM_PREFIX,
     getCustomPresets,
     setCustomPresets,
+    getReadingPrefs,
+    saveReadingPrefs,
     loadPreset,
     makeCustomId,
     projectCustom,
@@ -161,6 +163,7 @@
     loadTabSession,
     clearTabSession,
     syncPresetMarker,
+    syncPaperNoise,
     getRecentDocs,
     recordRecentHandle,
     removeRecentDoc,
@@ -243,7 +246,8 @@
     '<polyline points="6 9 12 15 18 9"/></svg>';
 
   function recentEntryIcon(entry) {
-    if (entry.kind === "handle") return ICON_DOC;
+    if (entry.kind === "library") return ICON_DOC;
+    if (entry.kind === "handle" || entry.kind === "file") return ICON_DOC;
     if (entry.kind === "url" && entry.url) {
       try {
         const u = new URL(entry.url);
@@ -450,8 +454,7 @@
     // contenteditable elements force-allow text selection at the browser
     // level — CSS user-select: none can't beat that, so we also block
     // selectstart and clear any selection that sneaks in (drag from
-    // outside, programmatic, etc.). The copyright <a> is unaffected:
-    // selectstart on links isn't required to activate their click.
+    // outside, programmatic, etc.).
     markAsPasteHost(empty);
     empty.addEventListener("selectstart", (e) => {
       e.preventDefault();
@@ -471,29 +474,6 @@
       stack = document.createElement("div");
       stack.className = "bsw-open-stack";
       empty.appendChild(stack);
-      // Bottom-left copyright. Fixed-positioned so it sits flush against the
-      // viewport edge; left+bottom share the same offset as Beautiful's left
-      // edge (hero left:30 + hero padding-left clamp(48px,4vw,80px)).
-      // Anchor with mailto so a click opens the user's default mail client
-      // pre-addressed to me. No subject/body — those leak into the browser's
-      // link-preview status bar at the page bottom and tie the email to the
-      // current document, which the user explicitly does not want.
-      const copyright = document.createElement("a");
-      copyright.className = "bsw-open-copyright";
-      copyright.href = "mailto:jxaa103024@yeah.net";
-      copyright.title = "Send feedback to Zhoubo";
-      copyright.textContent = "© Zhoubo";
-      // Inside a contenteditable host, link clicks would place the caret
-      // instead of navigating. Opt out + handle the click explicitly so a
-      // bare left-click reliably opens the mailto: URL.
-      copyright.setAttribute("contenteditable", "false");
-      copyright.addEventListener("mousedown", (e) => e.stopPropagation());
-      copyright.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.location.href = copyright.href;
-      });
-      heroEl.appendChild(copyright);
     }
 
     const btn = document.createElement("button");
@@ -586,9 +566,10 @@
    * @param {() => void} [opts.onAfterBoot]
    */
   async function boot(opts) {
+    const savedPrefs = await getReadingPrefs();
     const prepared = opts.prepareSettings
-      ? opts.prepareSettings(Object.assign({}, opts.syncDefaults))
-      : Object.assign({}, opts.syncDefaults);
+      ? opts.prepareSettings(Object.assign({}, opts.syncDefaults, savedPrefs))
+      : Object.assign({}, opts.syncDefaults, savedPrefs);
 
     let customPresets = await getCustomPresets();
     const builtIn = new Set(root.BaselineSwitcher.PRESETS.map((p) => p.value));
@@ -596,10 +577,10 @@
     if (!(builtIn.has(prepared.preset) || customIds.has(prepared.preset))) {
       prepared.preset = "default";
     }
-
-    // New document surfaces always start at standard width. Split / wide /
-    // full stay per-tab for this session only (not shared across tabs).
-    prepared.width = "standard";
+    // Viewer-only widths (e.g. bilingual) fall back; unknown → standard.
+    if (!WIDTH_VALUES.has(prepared.width)) {
+      prepared.width = "standard";
+    }
 
     const ui = {
       mode: "light",
@@ -677,7 +658,7 @@
 
     let mainChromeHandle = null;
     let splitChromeHandle = null;
-    // Dirty bit per column: true after an edit applies, cleared on download
+    // Dirty bit per column: true after an edit applies, cleared on save
     // and whenever the column's content is freshly loaded (pick / paste /
     // recent / empty-state). mountChrome reads this at mount time; live
     // updates use the returned handle's setDirty() to flip the dot without
@@ -686,58 +667,88 @@
     let splitDirty = false;
     // Origin marker per column: true when content came straight from disk
     // (Open File / drag-drop / Recent entry / local-file content boot) and
-    // hasn't been edited since. While true and !dirty, the Download button
+    // hasn't been edited since. While true and !dirty, the Save button
     // hides — the on-disk copy is still authoritative. Flips to false once
     // the user pastes / translates / loads new content, or sets back to true
-    // after a download (which conceptually re-syncs disk).
+    // after a successful save (which re-syncs disk).
     // leftFromLocalFile is seeded further down once we've parsed opts.initial
     // (need access to opts before we can read .fromLocalFile). Both default
     // to false; the boot path below sets leftFromLocalFile if applicable.
     let leftFromLocalFile = false;
     let splitFromLocalFile = false;
+    // Live FileSystemFileHandle per column (picker / recents / Save As).
+    // Non-null → Save writes via createWritable. Cleared when content
+    // arrives from a non-handle source (paste, URL, clip).
+    let leftFileHandle = null;
+    let splitFileHandle = null;
 
-    function refreshDownloadVisibility(side) {
-      const handle = side === "right" ? splitChromeHandle : mainChromeHandle;
-      if (!handle) return;
+    function setColumnHandle(side, handle) {
+      if (side === "right") splitFileHandle = handle || null;
+      else leftFileHandle = handle || null;
+    }
+
+    // Unified Save: write-back → Save As → download. Returns the smart-save
+    // result for toast wording in toc.js.
+    async function saveColumn(side) {
+      const shared = root.BaselineShared;
+      if (!shared || typeof shared.saveMarkdownSmart !== "function") {
+        throw new Error("saveMarkdownSmart unavailable");
+      }
+      const handle = side === "right" ? splitFileHandle : leftFileHandle;
+      const text = side === "right" ? splitMarkdown : leftMarkdown;
+      const name = side === "right"
+        ? (splitFileName || "untitled.md")
+        : (leftFileName || "untitled.md");
+      const result = await shared.saveMarkdownSmart({
+        handle,
+        text: text || "",
+        suggestedName: name
+      });
+      if (result && result.handle) {
+        setColumnHandle(side, result.handle);
+        recordRecentHandle(result.handle, result.name || name).catch(() => {});
+      }
+      if (result && result.name && result.mode === "saveas") {
+        if (side === "right") splitFileName = result.name;
+        else leftFileName = result.name;
+      }
+      // Disk (or download) now matches memory — clear dirty; hide Save when
+      // we have a handle or just finished a download that re-synced "local".
+      if (side === "right") {
+        splitDirty = false;
+        splitFromLocalFile = !!(splitFileHandle || result.mode === "download");
+        setColumnDirty(splitChromeHandle, false);
+        refreshSaveVisibility("right");
+      } else {
+        leftDirty = false;
+        leftFromLocalFile = !!(leftFileHandle || result.mode === "download");
+        setColumnDirty(mainChromeHandle, false);
+        refreshSaveVisibility("left");
+      }
+      return result;
+    }
+
+    function refreshSaveVisibility(side) {
+      const chrome = side === "right" ? splitChromeHandle : mainChromeHandle;
+      if (!chrome) return;
       const dirty = side === "right" ? splitDirty : leftDirty;
-      const fromLocal = side === "right" ? splitFromLocalFile : leftFromLocalFile;
-      const visible = !fromLocal || dirty;
-      // mountChrome is async; the handle may still be a Promise.
-      Promise.resolve(handle).then((resolved) => {
-        if (resolved && typeof resolved.setDownloadVisible === "function") {
+      const fileHandle = side === "right" ? splitFileHandle : leftFileHandle;
+      // Hide only when we have a live handle AND the disk copy is clean.
+      // No handle (clip/paste/URL) → always show so the user can Save As.
+      const visible = !fileHandle || dirty;
+      Promise.resolve(chrome).then((resolved) => {
+        if (!resolved) return;
+        if (typeof resolved.setSaveVisible === "function") {
+          resolved.setSaveVisible(visible);
+        } else if (typeof resolved.setDownloadVisible === "function") {
           resolved.setDownloadVisible(visible);
         }
       });
     }
 
-    function downloadLeftMarkdown() {
-      const shared = root.BaselineShared;
-      if (!shared || typeof shared.downloadMarkdown !== "function") {
-        return Promise.reject(new Error("downloadMarkdown unavailable"));
-      }
-      const name = leftFileName || "untitled.md";
-      return Promise.resolve(shared.downloadMarkdown(leftMarkdown || "", name))
-        .then(() => {
-          leftDirty = false;
-          // The on-disk file now matches what the user saved, so treat it
-          // as a local file again — the button hides until the next edit.
-          leftFromLocalFile = true;
-          refreshDownloadVisibility("left");
-        });
-    }
-
-    function downloadSplitMarkdown() {
-      const shared = root.BaselineShared;
-      if (!shared || typeof shared.downloadMarkdown !== "function") {
-        return Promise.reject(new Error("downloadMarkdown unavailable"));
-      }
-      const name = splitFileName || "untitled.md";
-      return Promise.resolve(shared.downloadMarkdown(splitMarkdown || "", name))
-        .then(() => {
-          splitDirty = false;
-          splitFromLocalFile = true;
-          refreshDownloadVisibility("right");
-        });
+    // Alias for older call sites in this boot() closure.
+    function refreshDownloadVisibility(side) {
+      refreshSaveVisibility(side);
     }
 
     function updateTranslateUi() {
@@ -757,6 +768,14 @@
     let lastPreset = prepared.preset;
     let lastMode = prepared.mode;
     let lastWidth = prepared.width;
+
+    function persistReadingPrefs() {
+      saveReadingPrefs({
+        preset: lastPreset,
+        mode: lastMode,
+        width: lastWidth
+      }).catch(() => { /* extension context invalidated; harmless */ });
+    }
 
     const sessionKey = opts.persistSessionKey || null;
     let persistTimer = 0;
@@ -812,13 +831,22 @@
       }, 400);
     }
 
-    function applyStandardWidthLocal() {
+    // Re-assert the user's preferred width after a column remount. Do not
+    // snap back to "standard" — width is remembered across docs/sessions.
+    function reassertWidthLocal() {
+      if (lastWidth === "split") {
+        if (!splitOn) enableSplit();
+        if (switcherRef) switcherRef.setWidth("split");
+        if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
+          mainChromeHandle.setActiveWidth("split");
+        }
+        return;
+      }
       if (splitOn) return;
-      lastWidth = "standard";
-      applyWidth("standard");
-      if (switcherRef) switcherRef.setWidth("standard");
+      applyWidth(lastWidth);
+      if (switcherRef) switcherRef.setWidth(lastWidth);
       if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-        mainChromeHandle.setActiveWidth("standard");
+        mainChromeHandle.setActiveWidth(lastWidth);
       }
     }
 
@@ -985,6 +1013,7 @@
       leftMarkdown = "";
       leftFileName = "";
       leftDirty = false;
+      leftFileHandle = null;
       ui.hasMainContent = false;
       const empty = buildColumnEmptyUI(() => pickFor("left"), opts.pickLabel, {
         includeHero: !!opts.emptyStart
@@ -1003,16 +1032,15 @@
         bindSlimBodyDblclick();
         enableSlimBodyPaste();
       }
-      // Open tab only: surface the recent list under the picker button.
+      // Open tab only: unified「最近」list (file/url pointers + library docs).
       if (opts.emptyStart && opts.showRecents !== false) {
         const recentSlot = document.createElement("div");
         recentSlot.className = "bsw-recent-slot";
         const stack = empty.querySelector(".bsw-open-stack") || empty;
         stack.appendChild(recentSlot);
-        refreshRecentList(recentSlot, "left");
-        // Down-chevron sibling of the stack: appears when the recent list
-        // overflows the stack's scroll budget (max-height = 100vh − 160px),
-        // and only while the stack is at the default scroll position.
+        refreshUnifiedList(recentSlot, "left");
+        // Down-chevron sibling of the stack: appears when the list overflows
+        // the stack's scroll budget, and only while near the top.
         if (stack !== empty) {
           mountStackOverflowArrow(empty, stack);
         }
@@ -1053,24 +1081,79 @@
       };
       stack.addEventListener("scroll", update, { passive: true });
       // Recompute when the stack's own box resizes (viewport changes) AND
-      // when the recent list's content changes (renderRecentList swaps the
-      // slot's innerHTML, which changes scrollHeight without changing the
-      // stack's border-box). Observe both for the union of both signals.
+      // when the unified list re-renders (innerHTML swap). Observe both.
       if (typeof ResizeObserver === "function") {
         const ro = new ResizeObserver(update);
         ro.observe(stack);
         const slot = stack.querySelector(":scope > .bsw-recent-slot");
         if (slot) ro.observe(slot);
       }
-      // Two rAFs: first lets the recent list's getRecentDocs() promise
-      // resolve & render; second lets layout settle so scrollHeight is real.
+      // Two rAFs: first lets the async list load resolve & render; second
+      // lets layout settle so scrollHeight is real.
       requestAnimationFrame(() => requestAnimationFrame(update));
     }
 
-    function renderRecentList(slot, list, side, opts) {
+    // ── Unified「最近」list (file/url pointers + library docs) ─────────
+    // Storage stays split (recents = pointers, library = full markdown);
+    // only the empty-state UI merges them by last-touched time + search.
+    const UNIFIED_RENDER_MAX = 50;
+
+    function openLibraryEntry(doc, side) {
+      const target = side === "right" ? "right" : "left";
+      if (!confirmDiscardIfDirty(target)) return;
+      Promise.resolve(replaceColumn(target, doc.markdown, doc.name || ""))
+        .then(() => {
+          if (target === "left" && /\bopen\.html/.test(location.pathname)) {
+            try { history.replaceState(null, "", "open.html?doc=" + doc.id); }
+            catch (_) {}
+          }
+        })
+        .catch((e) => console.warn("[Baseline] open library doc failed:", e));
+    }
+
+    function buildUnifiedEntries(recents, docs) {
+      const items = [];
+      for (const e of recents || []) {
+        items.push({
+          kind: e.kind === "url" ? "url" : (e.kind || "file"),
+          id: e.id,
+          name: e.name || "",
+          url: e.url || "",
+          ts: e.lastOpened || 0,
+          recent: e,
+          markdown: ""
+        });
+      }
+      for (const d of docs || []) {
+        items.push({
+          kind: "library",
+          id: d.id,
+          name: d.name || "",
+          url: d.url || "",
+          ts: d.updatedAt || d.createdAt || 0,
+          doc: d,
+          markdown: d.markdown || ""
+        });
+      }
+      items.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      return items;
+    }
+
+    function unifiedEntryMatches(entry, q) {
+      if (!q) return true;
+      if ((entry.name || "").toLowerCase().includes(q)) return true;
+      if ((entry.url || "").toLowerCase().includes(q)) return true;
+      if (entry.kind === "library" &&
+          (entry.markdown || "").toLowerCase().includes(q)) {
+        return true;
+      }
+      return false;
+    }
+
+    function renderUnifiedList(slot, items, side, listOpts, filterText) {
       slot.innerHTML = "";
-      if (!list || !list.length) return;
-      const narrow = !!(opts && opts.narrow);
+      if (!items || !items.length) return;
+      const narrow = !!(listOpts && listOpts.narrow);
       const wrap = document.createElement("div");
       wrap.className = "bsw-recent-list" + (narrow ? " bsw-recent-list--narrow" : "");
 
@@ -1078,74 +1161,104 @@
       heading.className = "bsw-recent-heading";
       const headingText = document.createElement("span");
       headingText.className = "bsw-recent-heading-text";
-      headingText.textContent = "Recent";
+      headingText.textContent = "最近";
       heading.appendChild(headingText);
+
+      const search = document.createElement("input");
+      search.type = "search";
+      search.className = "bsw-library-search";
+      search.placeholder = "搜索标题或内容…";
+      search.value = filterText || "";
+      search.addEventListener("click", (ev) => ev.stopPropagation());
+      search.addEventListener("input", (ev) => {
+        ev.stopPropagation();
+        paintItems(search.value);
+      });
+      heading.appendChild(search);
       wrap.appendChild(heading);
 
       const ul = document.createElement("ul");
       ul.className = "bsw-recent-items";
-      for (const entry of list) {
-        const li = document.createElement("li");
-        li.className = "bsw-recent-item";
-        li.setAttribute("data-kind", entry.kind);
-        // Whole row is the click target — icon, name, time, and the gaps
-        // between them all open the entry. The delete button stops propagation
-        // so its clicks don't also trigger an open. stopPropagation on the li
-        // prevents the click from bubbling to the surrounding view-level
-        // dblclick area (which would otherwise fire the empty-area picker).
-        li.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          openRecentEntry(entry, side).catch((e) =>
-            console.warn("[Baseline] open recent failed:", e));
-        });
-
-        const iconWrap = document.createElement("span");
-        iconWrap.className = "bsw-recent-icon";
-        iconWrap.innerHTML = recentEntryIcon(entry);
-
-        const main = document.createElement("button");
-        main.type = "button";
-        main.className = "bsw-recent-main";
-        main.title = entry.url || entry.name || "";
-        const nm = document.createElement("span");
-        nm.className = "bsw-recent-name";
-        nm.textContent = entry.name || entry.url || "(untitled)";
-        main.appendChild(nm);
-
-        const time = document.createElement("span");
-        time.className = "bsw-recent-time";
-        time.textContent = relativeTime(entry.lastOpened);
-
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "bsw-recent-remove";
-        del.title = "Remove from recent";
-        del.setAttribute("aria-label", "Remove from recent");
-        // Text glyph instead of inline SVG — sidesteps the
-        // .markdown-rendered svg:not(.svg-icon) {height:auto} cascade that
-        // was collapsing the icon to 0 height despite explicit sizing.
-        del.textContent = "×";
-        del.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          removeRecentDoc(entry.id)
-            .then(() => refreshRecentList(slot, side, opts))
-            .catch((e) => console.warn("[Baseline] remove recent failed:", e));
-        });
-
-        li.appendChild(iconWrap);
-        li.appendChild(main);
-        li.appendChild(time);
-        li.appendChild(del);
-        ul.appendChild(li);
-      }
       wrap.appendChild(ul);
+
+      function paintItems(query) {
+        ul.innerHTML = "";
+        const q = (query || "").trim().toLowerCase();
+        const matches = items.filter((e) => unifiedEntryMatches(e, q));
+        for (const entry of matches.slice(0, UNIFIED_RENDER_MAX)) {
+          const li = document.createElement("li");
+          li.className = "bsw-recent-item";
+          li.setAttribute("data-kind", entry.kind);
+          li.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (entry.kind === "library") {
+              openLibraryEntry(entry.doc, side);
+            } else {
+              openRecentEntry(entry.recent, side).catch((e) =>
+                console.warn("[Baseline] open recent failed:", e));
+            }
+          });
+
+          const iconWrap = document.createElement("span");
+          iconWrap.className = "bsw-recent-icon";
+          iconWrap.innerHTML = recentEntryIcon(entry);
+
+          const main = document.createElement("button");
+          main.type = "button";
+          main.className = "bsw-recent-main";
+          main.title = entry.url || entry.name || "";
+          const nm = document.createElement("span");
+          nm.className = "bsw-recent-name";
+          const rawName = entry.name || entry.url || "(untitled)";
+          nm.textContent = entry.kind === "library"
+            ? rawName.replace(/\.(md|markdown|mdown|mkd)$/i, "")
+            : rawName;
+          main.appendChild(nm);
+
+          const time = document.createElement("span");
+          time.className = "bsw-recent-time";
+          time.textContent = relativeTime(entry.ts);
+
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "bsw-recent-remove";
+          const delTip = entry.kind === "library"
+            ? "从文档库删除" : "从最近移除";
+          del.title = delTip;
+          del.setAttribute("aria-label", delTip);
+          del.textContent = "×";
+          del.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            const removeP = entry.kind === "library"
+              ? root.BaselineShared.removeLibraryDoc(entry.id)
+              : removeRecentDoc(entry.id);
+            removeP
+              .then(() => refreshUnifiedList(slot, side, listOpts))
+              .catch((e) => console.warn("[Baseline] remove list entry failed:", e));
+          });
+
+          li.appendChild(iconWrap);
+          li.appendChild(main);
+          li.appendChild(time);
+          li.appendChild(del);
+          ul.appendChild(li);
+        }
+      }
+
+      paintItems(filterText || "");
       slot.appendChild(wrap);
     }
 
-    function refreshRecentList(slot, side, opts) {
-      getRecentDocs()
-        .then((list) => renderRecentList(slot, list, side, opts))
-        .catch((e) => console.warn("[Baseline] load recent failed:", e));
+    function refreshUnifiedList(slot, side, listOpts) {
+      const libP = root.BaselineShared.getLibraryDocs
+        ? root.BaselineShared.getLibraryDocs()
+        : Promise.resolve([]);
+      Promise.all([getRecentDocs(), libP])
+        .then(([recents, docs]) => {
+          const items = buildUnifiedEntries(recents, docs);
+          renderUnifiedList(slot, items, side, listOpts);
+        })
+        .catch((e) => console.warn("[Baseline] load unified list failed:", e));
     }
 
     // mountChrome is async → handle is a Promise. Destroy via .then so we
@@ -1176,6 +1289,7 @@
         mainChromeHandle.reconnectSpy();
       }
       updateTranslateUi();
+      persistReadingPrefs();
       scheduleTabSessionPersist();
     }
 
@@ -1328,11 +1442,12 @@
         editTooltip: opts.mainEditTooltip,
         onSwap: () => pickFor("left"),
         swapTooltip: "打开其他",
-        onDownload: downloadLeftMarkdown,
-        downloadTooltip: "下载",
-        downloadDoneText: "Downloaded",
+        onSave: () => saveColumn("left"),
+        saveTooltip: "保存",
+        saveDoneText: "已保存",
+        saveDownloadText: "已下载",
         isDirty: leftDirty,
-        hideDownload: leftFromLocalFile && !leftDirty,
+        hideSave: !!leftFileHandle && !leftDirty,
         withTOC: !splitOn,
         widthOptions: WIDTH_OPTIONS_MD,
         currentWidth: lastWidth,
@@ -1362,11 +1477,12 @@
         editTooltip: opts.splitEditTooltip,
         onSwap: () => pickFor("right"),
         swapTooltip: "打开其他",
-        onDownload: downloadSplitMarkdown,
-        downloadTooltip: "下载",
-        downloadDoneText: "Downloaded",
+        onSave: () => saveColumn("right"),
+        saveTooltip: "保存",
+        saveDoneText: "已保存",
+        saveDownloadText: "已下载",
         isDirty: splitDirty,
-        hideDownload: splitFromLocalFile && !splitDirty,
+        hideSave: !!splitFileHandle && !splitDirty,
         withTOC: false,
         widthOptions: WIDTH_OPTIONS_MD,
         currentWidth: lastWidth,
@@ -1379,10 +1495,13 @@
             const promotedText = splitMarkdown;
             const promotedName = splitFileName;
             const promotedFromLocal = splitFromLocalFile;
+            const promotedHandle = splitFileHandle;
             lastWidth = value;
             applyWidth(value);
             disableSplit();
             leftFromLocalFile = promotedFromLocal;
+            leftFileHandle = promotedHandle;
+            persistReadingPrefs();
             renderMainColumn(promotedText, promotedName, { resetWidth: false });
             return;
           }
@@ -1460,6 +1579,7 @@
       if (!ui.hasMainContent && opts.emptyStart) {
         showMainEmptyState();
         mountMainChrome();
+        syncPaperNoise(lastPreset);
         return;
       }
 
@@ -1483,11 +1603,11 @@
       } else {
         root.BaselineShared.resetColumnScroll(mountEl);
       }
-      // resetWidth:false skips the standard-width snap — used by the
-      // split→single promotion path, which has already set lastWidth to
-      // whatever the user picked in the right column's dropdown.
+      // resetWidth:false skips the reassert — used by the split→single
+      // promotion path, which has already set lastWidth to whatever the
+      // user picked in the right column's dropdown.
       if (!colOpts || colOpts.resetWidth !== false) {
-        applyStandardWidthLocal();
+        reassertWidthLocal();
       }
       mountMainChrome();
       syncOpenEmptyAreaClick();
@@ -1509,11 +1629,19 @@
       // (pickFor, openRecentEntry for file kind, file-input fallback)
       // must pass fromLocalFile: true.
       const fromLocal = !!(colOpts && colOpts.fromLocalFile);
+      // Handle lifecycle: callers with a live FileSystemFileHandle pass it in
+      // colOpts.fileHandle; everything else clears the slot so save-back can
+      // never write to a file the visible content didn't come from.
+      // keepHandle (edit write-back) preserves the existing association.
+      if (!colOpts || !colOpts.keepHandle) {
+        setColumnHandle(side === "right" ? "right" : "left",
+          (colOpts && colOpts.fileHandle) || null);
+      }
       if (side === "left" || side === "main") {
         leftFromLocalFile = fromLocal;
         const p = renderMainColumn(text, label, colOpts);
         // renderMainColumn (re)mounts the chrome, which reads
-        // leftFromLocalFile/leftDirty for the initial hideDownload value.
+        // leftFileHandle/leftDirty for the initial hideSave value.
         // No extra refresh needed for the initial render, but we still call
         // refresh here so any in-flight chrome promise picks up the latest.
         Promise.resolve(p).then(() => refreshDownloadVisibility("left"));
@@ -1668,7 +1796,10 @@
         }
       };
       if (col === "right") {
-        Promise.resolve(replaceColumn("right", msg.text, label, preserveScroll))
+        // keepHandle: edits still belong to the original file — save-back
+        // must keep working after a round-trip through the editor.
+        Promise.resolve(replaceColumn("right", msg.text, label,
+          Object.assign({ keepHandle: true }, preserveScroll)))
           .then(flipDirty);
       } else {
         Promise.resolve(renderMainColumn(msg.text, label, preserveScroll))
@@ -1677,30 +1808,29 @@
     };
 
     const rightInput = makeFileInput((text, name, handle) => {
-      replaceColumn("right", text, name || "", { fromLocalFile: true });
+      replaceColumn("right", text, name || "",
+        { fromLocalFile: true, fileHandle: handle });
       if (handle) recordRecentHandle(handle, name || "").catch(() => {});
     });
     const leftInput = makeFileInput((text, name, handle) => {
-      replaceColumn("left", text, name || "", { fromLocalFile: true });
+      replaceColumn("left", text, name || "",
+        { fromLocalFile: true, fileHandle: handle });
       if (handle) recordRecentHandle(handle, name || "").catch(() => {});
     });
     document.body.appendChild(rightInput);
     document.body.appendChild(leftInput);
 
     // Guard for any user-initiated replacement of a column's content: if
-    // that column has an applied edit that hasn't been downloaded yet,
-    // confirm before we throw it away. Returns true to proceed, false to
-    // bail. Same wording shape as the edit popup's swap confirm so users
-    // see consistent "use Download (top right) to save first" guidance.
+    // that column has an applied edit that hasn't been saved yet, confirm
+    // before we throw it away. Returns true to proceed, false to bail.
     function confirmDiscardIfDirty(side) {
       const dirty = side === "right" ? splitDirty : leftDirty;
       if (!dirty) return true;
       return window.confirm(
-        "You have unsaved edits in this document.\n\n" +
-        "Opening another file will discard them. " +
-        "Click Cancel and use the Download button (top right) " +
-        "to save first.\n\n" +
-        "Click OK to discard and open the new file."
+        "当前文档有未保存的修改。\n\n" +
+        "打开其他文件将丢弃这些修改。" +
+        "请点取消，再用右上角「保存」先保存。\n\n" +
+        "点确定将丢弃修改并打开新文件。"
       );
     }
 
@@ -1716,7 +1846,8 @@
           recordRecentHandle(picked.handle, picked.name).catch(() => {});
         }
         await replaceColumn(side === "right" ? "right" : "left",
-          picked.text, picked.name, { fromLocalFile: true });
+          picked.text, picked.name,
+          { fromLocalFile: true, fileHandle: picked.handle });
         return true;
       }
       // showOpenFilePicker missing → fall back to file input.
@@ -1764,12 +1895,9 @@
       if (!loaded) {
         if (window.confirm("文件无法访问，可能已被移动或删除。\n从最近列表中移除？")) {
           removeRecentDoc(entry.id).catch(() => {});
-          const slot = mountEl.closest(".view-content");
-          if (slot) {
-            getRecentDocs()
-              .then((list) => renderRecentList(slot, list, side, opts))
-              .catch(() => {});
-          }
+          const view = mountEl && mountEl.closest(".view-content");
+          const slot = view && view.querySelector(".bsw-recent-slot");
+          if (slot) refreshUnifiedList(slot, side);
         }
         return;
       }
@@ -1786,7 +1914,7 @@
       // (kind === "url") came from the network — keep Download visible.
       const fromLocalFile = entry.kind !== "url";
       await replaceColumn(target, loaded.text, loaded.name || entry.name || "",
-        { fromLocalFile });
+        { fromLocalFile, fileHandle: loaded.handle });
     }
 
     async function recordRecentUrlBump(entry) {
@@ -1855,7 +1983,7 @@
       const recentSlot = document.createElement("div");
       recentSlot.className = "bsw-recent-slot";
       empty.appendChild(recentSlot);
-      refreshRecentList(recentSlot, "right", { narrow: true });
+      refreshUnifiedList(recentSlot, "right", { narrow: true });
 
       let rv = splitView.querySelector(".markdown-reading-view");
       if (!rv) {
@@ -1957,6 +2085,7 @@
       splitMarkdown = "";
       splitFileName = "";
       splitDirty = false;
+      splitFileHandle = null;
       leaf.appendChild(splitView);
       splitView.addEventListener("dblclick", onSplitEmptyAreaClick);
       document.body.classList.add("bsw-twopane-active");
@@ -1988,6 +2117,7 @@
       splitMarkdown = "";
       splitFileName = "";
       splitDirty = false;
+      splitFileHandle = null;
       mountMainChrome();
       syncPasteRegistry();
       updateTranslateUi();
@@ -2067,11 +2197,13 @@
         if (splitOn && splitMountEl) {
           reassertTypographyLock(splitMountEl, value);
         }
+        persistReadingPrefs();
         scheduleTabSessionPersist();
       },
       onModeChange: (value) => {
         lastMode = value;
         applyMode(value);
+        persistReadingPrefs();
         scheduleTabSessionPersist();
       },
       onWidthChange: handleWidthChange,
@@ -2096,6 +2228,7 @@
             reassertTypographyLock(splitMountEl, "default");
           }
           switcher.setPreset("default");
+          persistReadingPrefs();
         }
       },
       onTargetLanguageChange: async (lang) => {
@@ -2123,6 +2256,16 @@
     switcherRef = switcher;
     switcher.setColorScheme(ui.mode);
     updateTranslateUi(); /* hide switcher + doc-tools on empty open tab */
+
+    // applyWidth("split") is a no-op (split is a layout mode). Restore it
+    // after chrome exists when the remembered preference is split.
+    if (lastWidth === "split" && !splitOn) {
+      enableSplit();
+      if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
+        mainChromeHandle.setActiveWidth("split");
+      }
+      switcher.setWidth("split");
+    }
 
     async function restoreTabSession(saved) {
       if (!saved || saved.v !== 1) return;
@@ -2195,12 +2338,10 @@
       });
     }
 
-    // Edited-but-not-downloaded guard: leftDirty / splitDirty flip to true
-    // when the edit popup applies a change back into this surface (see the
-    // baselineEditApplied handler in onEdited) and clear when the user
-    // downloads that column. Browser-native confirm — Chrome controls the
-    // dialog text, no custom buttons possible. User can cancel the close,
-    // hit Download manually, then close again.
+    // Edited-but-not-saved guard: leftDirty / splitDirty flip to true when
+    // the edit popup applies a change back into this surface and clear when
+    // the user saves that column. Browser-native confirm — Chrome controls
+    // the dialog text. User can cancel the close, hit Save, then close again.
     window.addEventListener("beforeunload", (e) => {
       if (!leftDirty && !splitDirty) return;
       e.preventDefault();
@@ -2227,6 +2368,7 @@
             reassertTypographyLock(splitMountEl, "default");
           }
           switcher.setPreset("default");
+          persistReadingPrefs();
         } else {
           await commitPresetTypography(mountEl, lastPreset, (p) => applyPreset(p));
           if (splitOn && splitMountEl) {
@@ -2253,7 +2395,8 @@
 
   /** Same reading surface as file:// .md tabs (content.js / open.html). */
   function prepareMdReadingSettings(settings) {
-    settings.width = "standard";
+    // bilingual is viewer-only; keep remembered standard/wide/full/split.
+    if (settings.width === "bilingual") settings.width = "standard";
     return settings;
   }
 

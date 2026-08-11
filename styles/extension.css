@@ -517,6 +517,15 @@ body.bsw-open-page.bsw-open-chrome-hidden .bsw-open-stack > .bsw-stack-feather {
   pointer-events: none;
   z-index: 4;
 }
+/* Match stack bg in dark mode — white feather reads as a bright bar. */
+body.bsw-open-page.bsw-open-chrome-hidden.theme-dark .bsw-open-stack > .bsw-stack-feather {
+  background: linear-gradient(
+    to top,
+    var(--background-secondary, #1e1e1e) 0%,
+    var(--background-secondary, #1e1e1e) 40%,
+    transparent 100%
+  );
+}
 body.bsw-open-page.bsw-open-chrome-hidden .bsw-open-stack > .bsw-stack-feather.is-visible {
   display: block;
 }
@@ -827,40 +836,6 @@ body.theme-dark .bsw-open-paste-hint kbd {
   margin-top: -4px;
 }
 
-/* Bottom-left copyright on the open page. Both offsets share the same value
-   as Beautiful's left edge (hero left:30 + hero padding-left clamp).
-   Hidden below the 900px hero breakpoint where the hero is collapsed. */
-body.bsw-open-page.bsw-open-chrome-hidden .bsw-open-copyright {
-  display: block;
-  position: absolute;
-  left: 48px;
-  bottom: 48px;
-  font-family: "Snell Roundhand", "Apple Chancery", "Brush Script MT",
-    "Lucida Handwriting", cursive;
-  font-style: italic;
-  font-weight: 500;
-  font-size: 18px;
-  letter-spacing: 0.02em;
-  color: rgba(0, 0, 0, 0.3);
-  text-decoration: none;
-  cursor: pointer;
-  z-index: 6;
-  transition: color 0.18s ease;
-}
-body.bsw-open-page.bsw-open-chrome-hidden .bsw-open-copyright:hover,
-body.bsw-open-page.bsw-open-chrome-hidden .bsw-open-copyright:focus,
-body.bsw-open-page.bsw-open-chrome-hidden .bsw-open-copyright:visited {
-  text-decoration: none;
-}
-body.bsw-open-page.bsw-open-chrome-hidden .bsw-open-copyright:hover {
-  color: var(--bsw-hero-blue);
-}
-body.bsw-open-page.bsw-open-chrome-hidden.theme-dark .bsw-open-copyright {
-  color: rgba(255, 255, 255, 0.3);
-}
-body.bsw-open-page.bsw-open-chrome-hidden.theme-dark .bsw-open-copyright:hover {
-  color: var(--bsw-hero-blue);
-}
 .bsw-recent-slot:empty { display: none; }
 
 .bsw-recent-list {
@@ -876,7 +851,7 @@ body.bsw-open-page.bsw-open-chrome-hidden.theme-dark .bsw-open-copyright:hover {
 .bsw-recent-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin: 0 0 10px;
   font-size: 11px;
   font-weight: 400;
@@ -1048,6 +1023,28 @@ body.theme-dark .bsw-recent-remove:hover {
 
 /* Narrow variant (Split right column): tighter typography and padding so
    two-line items don't crowd a half-width column. */
+/* Search inside the unified「最近」heading */
+.bsw-library-search {
+  flex: 1;
+  min-width: 0;
+  max-width: 220px;
+  margin-left: auto;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-normal, #191a1b);
+  background: var(--background-primary, #fff);
+  border: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.12));
+  border-radius: 6px;
+  outline: none;
+}
+.bsw-library-search:focus {
+  border-color: var(--interactive-accent, #2241F4);
+}
+.bsw-library-search::placeholder {
+  color: var(--text-faint, #adb1b8);
+}
+
 .bsw-recent-list--narrow .bsw-recent-heading { margin-bottom: 8px; }
 .bsw-recent-list--narrow .bsw-recent-item {
   grid-template-columns: 24px minmax(0, 1fr) auto;
@@ -1237,7 +1234,9 @@ body.theme-dark .bsw-code-copy.is-copied:hover {
    `font: inherit` on the toggle — otherwise every em below (size, offsets)
    would resolve against the wrong font and the dot would be small / high. */
 .markdown-rendered li {
-  --bsw-bullet-cx: -0.9em;     /* horizontal center of the marker slot   */
+  /* Shared marker gutter for disc / ol number / checkbox — keeps text
+     edges aligned across ul, ol, and task lists. */
+  --bsw-bullet-cx: -0.95em;    /* horizontal center of the marker slot   */
   --bsw-bullet-cy: 0.8em;      /* vertical center == first-line middle    */
   --bsw-bullet-size: 0.36em;   /* matches the browser's default disc      */
 }
@@ -1468,54 +1467,79 @@ body.theme-dark .bsw-fm-tag {
   background: var(--background-modifier-hover, rgba(255,255,255,0.07));
 }
 
-/* Task lists — the complete row is the target; the checkbox is only its state
-   marker. Icons are unchanged Google Material Icons Round assets from the
-   local material-design-icons repository, tinted through CSS masks. */
+/* Task lists — same text edge as ul/ol; LI box expands into the marker
+   gutter so the whole row (checkbox + text) is one click target. */
 .markdown-rendered ul.contains-task-list {
   list-style: none;
-  padding-left: 0;
+  --bsw-task-gutter: var(--bsw-typography-list-indent, 1.75em);
+}
+.markdown-rendered .task-list-item > ul.contains-task-list {
+  --bsw-task-gutter: var(--bsw-typography-nested-list-indent, 1.5em);
 }
 .markdown-rendered .task-list-item {
   list-style: none;
-  /* Inline-block checkbox + vertical-align: middle gives true x-height
-     centering (browser font metrics, not our guess). Hanging indent keeps
-     wrapped lines under the text edge, not under the checkbox.
-     Outer negative margin restores the original prose alignment while the
-     inner padding gives the hover pill its 8px breathing room. */
-  position: static;
-  margin: 0 -8px;
-  padding: 8px 8px 8px 32px;
-  text-indent: -24px;
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+  /* width:auto + negative margin fills the row; width:100% would end short
+     by one gutter on the right. */
+  width: auto;
+  text-indent: 0;
+  cursor: pointer !important;
+  min-height: 1.5em;
   border-radius: 6px;
-  cursor: pointer;
+  /* Pull into gutter, then pad back — text stays aligned; hit box covers row. */
+  margin-left: calc(-1 * var(--bsw-task-gutter, 1.75em));
+  margin-right: 0;
+  padding-left: var(--bsw-task-gutter, 1.75em);
+  padding-right: 0.35em;
   transition: background 0.12s ease;
 }
+/* Don't inherit the reading-column text cursor on the row. */
+.markdown-rendered .task-list-item,
+.markdown-rendered .task-list-item :not(a):not(code) {
+  cursor: pointer !important;
+}
 .markdown-rendered .task-list-item input[type="checkbox"] {
-  top: -1px;
-  display: inline-block;
-  vertical-align: middle;
-  /* The LI applies text-indent: -24px for hanging indent; reset it here so
-     the checkbox itself isn't pulled further sideways. */
+  --bsw-task-box: 1.15em;
+  position: absolute;
+  z-index: 1;
+  /* Match list text metrics so 0.5lh = first-line center. */
+  font: inherit;
+  line-height: var(--bsw-typography-line-height, 1.5);
+  /* Sit in the marker gutter, optically centered on the first text line. */
+  left: calc(var(--bsw-task-gutter, 1.75em) + var(--bsw-bullet-cx, -0.95em));
+  top: calc(var(--bsw-typography-task-padding-block, 0.2em) + 0.5lh);
+  transform: translate(-50%, -50%);
+  display: block;
   text-indent: 0;
   box-sizing: border-box;
-  width: 16px;
-  height: 16px;
-  margin: 0 8px 0 0;
+  width: var(--bsw-task-box);
+  height: var(--bsw-task-box);
+  margin: 0;
   padding: 0;
   appearance: none;
   border: 0;
   border-radius: 0;
   cursor: pointer;
+  pointer-events: auto;
   background-color: var(--checkbox-border-color, var(--text-faint, #9aa0a6));
   -webkit-mask: var(--bsw-task-icon-todo, url("../icons/material/check_box_outline_blank_round_24px.svg")) center / contain no-repeat;
   mask: var(--bsw-task-icon-todo, url("../icons/material/check_box_outline_blank_round_24px.svg")) center / contain no-repeat;
   transition: background-color 0.12s ease;
 }
+@supports not (top: 0.5lh) {
+  .markdown-rendered .task-list-item input[type="checkbox"] {
+    top: calc(
+      var(--bsw-typography-task-padding-block, 0.2em) +
+      (var(--bsw-typography-line-height, 1.5) * 0.5em)
+    );
+  }
+}
 .markdown-rendered .task-list-item input[type="checkbox"]:hover {
   background-color: var(--checkbox-border-color-hover, var(--text-muted, #757575));
 }
-/* Whole-row hover affordance — only the innermost task lights up, so hovering
-   a sub-task doesn't drag the parent row's background along with it. */
+/* Whole-row hover — only the innermost task lights up. */
 .markdown-rendered .task-list-item:hover:not(:has(.task-list-item:hover)) {
   background: rgba(0, 0, 0, 0.05);
 }
@@ -1555,13 +1579,10 @@ body.theme-dark .markdown-rendered .task-list-item:hover:not(:has(.task-list-ite
 body.theme-dark .markdown-rendered .task-list-item.is-cancelled .task-list-item {
   color: var(--text-normal, #dcddde);
 }
-/* Nested task lists live inside the parent <li>; restore indent so subtasks
-   read as children of the parent row, not siblings at the same margin.
-   text-indent: 0 stops the parent LI's hanging indent (-24px) from leaking
-   into the nested ul's block formatting context. */
+/* Nested task lists: same nested indent as other lists. */
 .markdown-rendered .task-list-item > ul.contains-task-list {
   margin: 0.2em 0 0;
-  padding-left: 1.65em;
+  padding-left: var(--bsw-typography-nested-list-indent, 1.5em);
   text-indent: 0;
 }
 
@@ -2731,11 +2752,11 @@ body.bsw-split-active #baseline-translate-panel,
    z-index sits below #baseline-toast (2147483646) so success/error
    toasts stay readable on top, and above TOC / switcher chrome so
    selections in those visible-on-scroll regions still get a menu. */
-/* Default = light. Dark variants applied via prefers-color-scheme
-   AND body.theme-dark (the edit page sets that class explicitly).
-   The selection menu is appended to document.body so it inherits
-   neither switcher CSS vars nor reading-surface vars; this is its
-   own self-contained theming island. */
+/* Default = light. Dark via body.theme-dark only (same source as the
+   reading surface / theme switcher). Do NOT also key off
+   prefers-color-scheme — that drifts from an explicit Light/Dark
+   choice and makes the chip look "stuck" in the wrong mode.
+   Appended to document.body, so this is a self-contained theme island. */
 .bsw-selection-menu {
   position: fixed;
   z-index: 2147483645;
@@ -2872,36 +2893,7 @@ body.bsw-split-active #baseline-translate-panel,
   color: var(--interactive-accent, #2241F4);
 }
 
-/* Dark theme — applied via system preference OR explicit theme-dark
-   class on body (used by edit.js + viewer). Both selectors target
-   the same rules to keep light/dark in lockstep. */
-@media (prefers-color-scheme: dark) {
-  .bsw-selection-menu,
-  .bsw-selection-menu-sub {
-    background: rgba(36, 38, 44, 0.92);
-    color: #e6edf3;
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow:
-      0 0.5px 1px rgba(0, 0, 0, 0.30),
-      0 2px 6px rgba(0, 0, 0, 0.32),
-      0 8px 20px rgba(0, 0, 0, 0.36),
-      0 24px 48px rgba(0, 0, 0, 0.40);
-  }
-  .bsw-selection-menu-btn:hover,
-  .bsw-selection-menu-sub-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-  .bsw-selection-menu-btn:focus-visible,
-  .bsw-selection-menu-sub-item:focus-visible {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--interactive-accent, #2241F4);
-  }
-  .bsw-selection-menu-btn:active,
-  .bsw-selection-menu-sub-item:active {
-    background: rgba(255, 255, 255, 0.14);
-    color: var(--interactive-accent, #2241F4);
-  }
-}
+/* Dark — follows body.theme-dark from the reading/edit theme switcher. */
 body.theme-dark .bsw-selection-menu,
 body.theme-dark .bsw-selection-menu-sub {
   background: rgba(36, 38, 44, 0.92);
@@ -3245,21 +3237,17 @@ body.theme-dark .bsw-width-option.is-active {
   align-items: flex-end;
   max-height: 70vh;
   padding: 4px 0;
-  /* gap shrinks as the heading list grows so the ruler always fits
-     within max-height. Min 2px keeps individual ticks readable even on
-     200+ heading docs; max 14px keeps short docs from spreading out.
-     overflow:hidden is the safety net for the truly pathological cases
-     where even a 2px gap can't fit — extra ticks clip rather than push
-     past 70vh. */
-  gap: clamp(
+  /* Visual spacing between 2px bars — baked into each tick's hit height
+     (not flex gap) so hover targets tile with zero dead seams. */
+  --bsw-ruler-gap: clamp(
     2px,
     calc((70vh - var(--bsw-ruler-count, 10) * 2px) / max(var(--bsw-ruler-count, 10) - 1, 1)),
     14px
   );
+  gap: 0;
   /* Both axes visible: the hover card (positioned left of ruler via
      right: calc(100% + 12px)) must extend past the ruler's bounds
-     without being clipped. The gap clamp() already constrains ticks
-     within 70vh, so overflow-y: visible is safe. */
+     without being clipped. Tick heights already constrain within 70vh. */
   overflow: visible;
   pointer-events: auto;
   cursor: pointer;
@@ -3277,7 +3265,7 @@ body.theme-dark .bsw-width-option.is-active {
    ~20% (per-level overrides below) so the dim lower tiers also become
    readable while the cursor is over the column. Each tick gets a
    counter scaleY(1/1.02) so the parent's vertical scaling stretches the
-   gaps but leaves the bar thickness visually at 2px. */
+   slots but leaves the bar thickness visually at 2px. */
 .bsw-toc-ruler:hover {
   transform: translateY(-50%) scale(1.02);
 }
@@ -3295,14 +3283,39 @@ body.theme-dark .bsw-width-option.is-active {
 .bsw-toc-tick {
   flex: none;
   display: block;
-  height: 2px;
-  border: 0;
+  /* Hit slot = bar (2px) + former inter-tick gap. Neighbors abut so the
+     pointer never falls through a seam; ::before keeps the 2px bar. */
+  height: calc(2px + var(--bsw-ruler-gap));
+  margin: 0;
   padding: 0;
-  background: var(--text-faint, #c0c5cb);
-  border-radius: 1px;
+  border: 0;
+  background: transparent;
   cursor: pointer;
   position: relative;
-  transition: opacity 0.12s ease, background 0.12s ease, width 0.12s ease;
+  box-sizing: border-box;
+  transition: opacity 0.12s ease, width 0.12s ease;
+}
+/* Ends take half a gap so total height stays 2n + gap*(n-1), matching
+   the old flex-gap layout (and max-height: 70vh budget). */
+.bsw-toc-tick:first-child,
+.bsw-toc-tick:last-child {
+  height: calc(2px + var(--bsw-ruler-gap) / 2);
+}
+.bsw-toc-tick:only-child {
+  height: 12px;
+}
+.bsw-toc-tick::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 100%;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background-color: var(--text-faint, #c0c5cb);
+  transition: background-color 0.12s ease;
+  pointer-events: none;
 }
 /* Width grows with hierarchy: smallest tier (h4) = 8px, +2px per level. */
 .bsw-toc-tick[data-level="1"] { width: 14px; }
@@ -3318,8 +3331,11 @@ body.theme-dark .bsw-width-option.is-active {
 .bsw-toc-tick:hover,
 .bsw-toc-tick:focus-visible {
   opacity: 1;
-  background: var(--text-normal, #1f2328);
   outline: none;
+}
+.bsw-toc-tick:hover::before,
+.bsw-toc-tick:focus-visible::before {
+  background-color: var(--text-normal, #1f2328);
 }
 /* Active (scroll-spy or click) always reads as the top-tier width +
    full opacity in accent blue, regardless of the heading's own level —
@@ -3327,36 +3343,39 @@ body.theme-dark .bsw-width-option.is-active {
 .bsw-toc-tick.is-active {
   opacity: 1;
   width: 14px;
-  background: var(--interactive-accent, #2241F4);
 }
-body.theme-dark .bsw-toc-tick {
-  background: var(--text-muted, #b0b8c0);
+.bsw-toc-tick.is-active::before {
+  background-color: var(--interactive-accent, #2241F4);
 }
-body.theme-dark .bsw-toc-tick:hover,
-body.theme-dark .bsw-toc-tick:focus-visible {
-  background: var(--text-normal, #f0f4f8);
+body.theme-dark .bsw-toc-tick::before {
+  background-color: var(--text-muted, #b0b8c0);
 }
-body.theme-dark .bsw-toc-tick.is-active {
-  background: var(--interactive-accent, #5aa6f1);
+body.theme-dark .bsw-toc-tick:hover::before,
+body.theme-dark .bsw-toc-tick:focus-visible::before {
+  background-color: var(--text-normal, #f0f4f8);
 }
-
-/* When hover card is visible, suppress per-tick tooltips to avoid overlap */
-.bsw-toc-ruler:hover .bsw-toc-tick[data-tooltip]::after {
-  opacity: 0 !important;
-  transition-delay: 0s !important;
+body.theme-dark .bsw-toc-tick.is-active::before {
+  background-color: var(--interactive-accent, #5aa6f1);
 }
 
 /* Tooltip — pill anchored to the LEFT of the tick (not below, like the
    doc-tools). Short dwell (250ms) because the rules are dense — long
-   delays make hovering feel unresponsive. */
+   delays make hovering feel unresponsive. Title text comes from
+   data-tooltip set in src/toc.js → buildRuler. */
 .bsw-toc-tick[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   right: calc(100% + 8px);
   top: 50%;
   transform: translate(4px, -50%);
-  background: #1f2228;
-  color: #e6edf3;
+  /* Follow reading theme (same rule as selection menu), not a hardcoded dark chip. */
+  background: rgba(255, 255, 255, 0.96);
+  color: #1d1d1f;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 0.5px 1px rgba(0, 0, 0, 0.04),
+    0 2px 6px rgba(0, 0, 0, 0.05),
+    0 8px 20px rgba(0, 0, 0, 0.06);
   padding: 4px 8px;
   border-radius: 6px;
   font: 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -3370,11 +3389,25 @@ body.theme-dark .bsw-toc-tick.is-active {
   transition-delay: 0s;
   z-index: 6;
 }
+body.theme-dark .bsw-toc-tick[data-tooltip]::after {
+  background: rgba(36, 38, 44, 0.92);
+  color: #e6edf3;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0.5px 1px rgba(0, 0, 0, 0.30),
+    0 2px 6px rgba(0, 0, 0, 0.32),
+    0 8px 20px rgba(0, 0, 0, 0.36);
+}
 .bsw-toc-tick[data-tooltip]:hover::after,
 .bsw-toc-tick[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translate(0, -50%);
   transition-delay: 0.25s;
+}
+/* If a hover card is shown later, hide per-tick tooltips to avoid overlap. */
+.bsw-toc-ruler:has(.bsw-toc-hover-card.is-visible) .bsw-toc-tick[data-tooltip]::after {
+  opacity: 0 !important;
+  transition-delay: 0s !important;
 }
 
 /* Hover card — lightweight floating TOC preview shown on ruler hover.

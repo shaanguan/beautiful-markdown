@@ -420,11 +420,10 @@
         // the editor on the old file (source page already moved on; that
         // state mismatch is acceptable, user can re-trigger edit later).
         const ok = window.confirm(
-          "You have unsaved edits in this editor.\n\n" +
-          "Switching to a different document will discard them. " +
-          "Save first (then use the Download button on the reading tab) " +
-          "if you want to keep your changes.\n\n" +
-          "Click OK to discard and switch, or Cancel to keep editing."
+          "编辑器中有未保存的修改。\n\n" +
+          "切换到其他文档将丢弃这些修改。" +
+          "如需保留，请先点保存，再到阅读页用「保存」写回文件。\n\n" +
+          "点确定丢弃并切换，点取消继续编辑。"
         );
         if (!ok) documentChanged = false;
       }

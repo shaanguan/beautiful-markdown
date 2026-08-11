@@ -27,10 +27,11 @@
   // Keeping the list short on purpose — extras go through the custom
   // import flow so users only see what we actively maintain.
   const PRESETS = [
-    { value: "default",     label: "Vibe (default)" },
+    { value: "default",     label: "Vibe" },
     { value: "claude",      label: "Claude" },
     { value: "minimal",     label: "Minimal" },
-    { value: "stone-gnome", label: "Stone" }
+    { value: "stone-gnome", label: "Stone" },
+    { value: "paper",       label: "Paper" }
   ];
 
   const MODES = [
