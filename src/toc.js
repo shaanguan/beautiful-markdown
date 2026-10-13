@@ -273,6 +273,10 @@
         clearTimeout(driftHomingTimer);
         driftHomingTimer = 0;
       }
+      if (driftRaf) {
+        cancelAnimationFrame(driftRaf);
+        driftRaf = 0;
+      }
       detachDriftScroll();
       if (!a) return;
       a.classList.add("is-active");
@@ -498,6 +502,7 @@
     return {
       reconnectSpy() { spyHandle.reconnect(); },
       destroy() {
+        setActive(null);
         toggle.destroy();
         unspy();
         ruler.removeEventListener("click", onRulerBlankClick);
@@ -937,6 +942,7 @@
       destroy() {
         if (docClickHandler) document.removeEventListener("click", docClickHandler);
         if (docKeyHandler) document.removeEventListener("keydown", docKeyHandler);
+        document.removeEventListener("bsw:panel-open", closeAllMenus);
         for (const el of ownButtons) {
           if (el && el.parentNode) el.parentNode.removeChild(el);
         }

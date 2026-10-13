@@ -1188,6 +1188,8 @@ pre code.hljs {
   border: 1px solid var(--background-modifier-border, rgba(0, 0, 0, 0.10));
   border-radius: 5px;
   cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
   opacity: 0;
   /* Don't intercept clicks while invisible — would block text-selection
      near the corner. Re-enables together with opacity on pre:hover. */
@@ -2667,6 +2669,8 @@ body.bsw-split-active #baseline-translate-panel,
   font-weight: 400;
   font-size: 0.7em;
   vertical-align: middle;
+  user-select: none;
+  -webkit-user-select: none;
   opacity: 0;
   border-radius: 4px;
   transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;

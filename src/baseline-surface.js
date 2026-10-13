@@ -587,6 +587,7 @@
       presetClasses: { common: [], light: [], dark: [] },
       appliedClasses: new Set(),
       mountEl: null,
+      splitMountEl: null,
       hasMainContent: false
     };
 
@@ -621,8 +622,14 @@
       ui.mode = resolved;
       rebuildBodyClasses();
       if (switcherRef) switcherRef.setColorScheme(resolved);
-      if (changed && ui.mountEl && root.BaselineRenderer.runMermaid) {
-        root.BaselineRenderer.runMermaid(ui.mountEl);
+      if (changed) {
+        if (document.documentElement.hasAttribute("data-bsw-preset")) {
+          syncPaperNoise(lastPreset);
+        }
+        if (root.BaselineRenderer && root.BaselineRenderer.runMermaid) {
+          if (ui.mountEl) root.BaselineRenderer.runMermaid(ui.mountEl);
+          if (ui.splitMountEl) root.BaselineRenderer.runMermaid(ui.splitMountEl);
+        }
       }
       // Broadcast the resolved mode so any open edit tab can mirror the
       // reading tab's Dark/Light without each maintaining its own toggle.
@@ -1972,6 +1979,7 @@
       const wrap = splitView.querySelector(":scope > .bsw-content-wrap");
       if (wrap) wrap.remove();
       splitMountEl = null;
+      ui.splitMountEl = null;
       splitMarkdown = "";
       splitFileName = "";
       splitDirty = false;
@@ -2000,6 +2008,7 @@
       splitPreview = preview;
       syncSplitEmptyAreaClick();
       syncPasteRegistry();
+      syncPaperNoise(lastPreset);
     }
 
     function mountSplitContent(text, colOpts) {
@@ -2037,6 +2046,7 @@
 
       splitPreview = preview;
       splitMountEl = sizer;
+      ui.splitMountEl = sizer;
       bindReadingDblClick(
         sizer,
         () => splitMarkdown || "",
@@ -2114,6 +2124,7 @@
       splitPreview = null;
       splitChromeHandle = null;
       splitMountEl = null;
+      ui.splitMountEl = null;
       splitMarkdown = "";
       splitFileName = "";
       splitDirty = false;

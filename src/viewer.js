@@ -42,6 +42,7 @@
     readColumnScroll,
     restoreColumnScroll,
     syncPresetMarker,
+    syncPaperNoise,
     commitPresetTypography,
     reassertTypographyLock,
     renderPreviewMarkdown
@@ -71,7 +72,8 @@
     mode: "light",
     presetClasses: { common: [], light: [], dark: [] },
     appliedClasses: new Set(),
-    mountEl: null
+    mountEl: null,
+    leftMountEl: null
   };
 
   function rebuildBodyClasses() {
@@ -101,9 +103,17 @@
     state.mode = resolved;
     rebuildBodyClasses();
     if (switcherRef) switcherRef.setColorScheme(resolved);
-    if (changed && state.mountEl && window.BaselineRenderer.runMermaid) {
-      window.BaselineRenderer.runMermaid(state.mountEl);
+    if (changed) {
+      const currentPreset = document.documentElement.getAttribute("data-bsw-preset");
+      if (currentPreset) syncPaperNoise(currentPreset);
+      if (window.BaselineRenderer && window.BaselineRenderer.runMermaid) {
+        if (state.mountEl) window.BaselineRenderer.runMermaid(state.mountEl);
+        if (state.leftMountEl) window.BaselineRenderer.runMermaid(state.leftMountEl);
+      }
     }
+    try {
+      chrome.storage.local.set({ bswEditFollowMode: resolved });
+    } catch (_) { /* extension context invalidated; harmless */ }
   }
 
   function applyWidth(width) {
@@ -363,9 +373,19 @@
     let lastText = "";
     let statusPill = null;
     let rightChromeHandle = null;
+    let leftChromeHandle = null;
     let rightDirty = false;
     let rightFromLocalFile = false;
     let rightFileHandle = null;
+
+    function destroyChromeHandle(h) {
+      if (!h) return;
+      Promise.resolve(h).then((resolved) => {
+        if (resolved && typeof resolved.destroy === "function") {
+          resolved.destroy();
+        }
+      });
+    }
 
     function refreshRightSaveVisibility() {
       // Hide only when a live handle exists and content matches disk.
@@ -661,6 +681,7 @@
 
     function mountRightChrome() {
       if (!window.BaselineTOC || !window.BaselineTOC.mountChrome) return;
+      if (rightChromeHandle) destroyChromeHandle(rightChromeHandle);
       const handle = window.BaselineTOC.mountChrome(mountEl, {
         getMarkdown: () => rightMarkdown || "",
         copyTooltip: "Copy translation",
@@ -697,7 +718,8 @@
 
     function mountLeftChrome() {
       if (!leftMountEl || !window.BaselineTOC || !window.BaselineTOC.mountChrome) return;
-      window.BaselineTOC.mountChrome(leftMountEl, {
+      if (leftChromeHandle) destroyChromeHandle(leftChromeHandle);
+      leftChromeHandle = window.BaselineTOC.mountChrome(leftMountEl, {
         getMarkdown: () => originalMarkdown || "",
         copyTooltip: "Copy source",
         copyDoneText: "Source copied",
@@ -727,6 +749,10 @@
     function teardownViewerSessionUi() {
       stopTranslationStream();
       disableBilingual();
+      if (rightChromeHandle) {
+        destroyChromeHandle(rightChromeHandle);
+        rightChromeHandle = null;
+      }
       if (pasteBinder) {
         if (rightView) pasteBinder.unregister(rightView);
         if (leftView) pasteBinder.unregister(leftView);
@@ -865,9 +891,10 @@
       let suppress = false;
       let raf = 0;
 
-      const onEnter = (side) => () => { activeSide = side; };
-      leftView.addEventListener("mouseenter", onEnter("left"));
-      rightView.addEventListener("mouseenter", onEnter("right"));
+      const onEnterLeft = () => { activeSide = "left"; };
+      const onEnterRight = () => { activeSide = "right"; };
+      leftView.addEventListener("mouseenter", onEnterLeft);
+      rightView.addEventListener("mouseenter", onEnterRight);
 
       function syncFrom(side) {
         if (suppress) return;
@@ -907,8 +934,8 @@
       return () => {
         leftView.removeEventListener("scroll", onLeftScroll);
         rightView.removeEventListener("scroll", onRightScroll);
-        leftView.removeEventListener("mouseenter", onEnter("left"));
-        rightView.removeEventListener("mouseenter", onEnter("right"));
+        leftView.removeEventListener("mouseenter", onEnterLeft);
+        rightView.removeEventListener("mouseenter", onEnterRight);
         if (raf) cancelAnimationFrame(raf);
       };
     }
@@ -921,6 +948,7 @@
       const built = buildLeftScaffold();
       leftView = built.view;
       leftMountEl = built.sizer;
+      state.leftMountEl = leftMountEl;
       leftRendered = false;
       bindReadingDblClick(
         leftMountEl,
@@ -955,10 +983,15 @@
       document.body.classList.remove("bsw-twopane-active");
       document.body.classList.remove("bsw-bilingual-active");
       tearDownScrollSync();
+      if (leftChromeHandle) {
+        destroyChromeHandle(leftChromeHandle);
+        leftChromeHandle = null;
+      }
       if (leftView && pasteBinder) pasteBinder.unregister(leftView);
       if (leftView && leftView.parentNode) leftView.parentNode.removeChild(leftView);
       leftView = null;
       leftMountEl = null;
+      state.leftMountEl = null;
       leftRendered = false;
       mountRightChrome();
       syncPasteRegistry();

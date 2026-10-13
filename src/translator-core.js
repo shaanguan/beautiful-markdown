@@ -55,24 +55,26 @@
     let index = 0;
     let text = String(markdown == null ? "" : markdown);
 
-    const protect = (pattern) => {
-      text = text.replace(pattern, (match) => {
+    const protect = (pattern, keepLeadingGroup) => {
+      text = text.replace(pattern, (match, g1) => {
+        const prefix = keepLeadingGroup && typeof g1 === "string" ? g1 : "";
+        const body = prefix ? match.slice(prefix.length) : match;
         const token = `${TOKEN_PREFIX}${String(index).padStart(6, "0")}@@`;
-        tokens[token] = match;
+        tokens[token] = body;
         index += 1;
-        return token;
+        return prefix + token;
       });
     };
 
     // Order matters: bigger structural blocks first, so a code fence isn't
     // chewed up by the inline-code regex.
     protect(/^---\r?\n[\s\S]*?\r?\n---(?=\r?\n|$)/);
-    protect(/(^|\r?\n)(```|~~~)[\s\S]*?(?:\r?\n\2[^\r\n]*|$)/g);
+    protect(/(^|\r?\n)(```|~~~)[\s\S]*?(?:\r?\n\2[^\r\n]*|$)/g, true);
     protect(/<!--[\s\S]*?-->/g);
     protect(/\$\$[\s\S]*?\$\$/g);
 
     if (preserveBlockquotes) {
-      protect(/(^|\r?\n)(?:[ \t]*>[^\r\n]*(?:\r?\n|$))+/g);
+      protect(/(^|\r?\n)(?:[ \t]*>[^\r\n]*(?:\r?\n|$))+/g, true);
     }
 
     protect(/!\[\[[^\]\r\n]+\]\]/g);
@@ -88,15 +90,20 @@
     protect(/<\/?[A-Za-z][^>\r\n]*>/g);
     // Hashtags (#foo, #中文-tag). Anchored on whitespace or open bracket so
     // we don't eat `#` inside URLs.
-    protect(/(^|[\s([{])#[\p{L}\p{N}_/-]+/gu);
+    protect(/(^|[\s([{])#[\p{L}\p{N}_/-]+/gu, true);
 
     return { text, tokens };
   }
 
   function restoreProtectedMarkdown(markdown, tokens) {
     let restored = String(markdown == null ? "" : markdown);
-    // split/join is correct here (literal string match, no regex escaping).
-    for (const token in tokens) {
+    if (!tokens) return restored;
+    // Restore in reverse creation order so outer tokens (e.g. a link wrapping
+    // an image token, or a blockquote wrapping math/code tokens) expand before
+    // the inner tokens they contain.
+    const keys = Object.keys(tokens);
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const token = keys[i];
       restored = restored.split(token).join(tokens[token]);
     }
     return restored;
