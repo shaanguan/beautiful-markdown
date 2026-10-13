@@ -470,28 +470,49 @@
     return blocks[0];
   }
 
+  function cleanBlockText(block) {
+    if (block && typeof block.cloneNode === "function" && typeof block.querySelectorAll === "function") {
+      const clone = block.cloneNode(true);
+      clone.querySelectorAll(".bsw-heading-anchor, .bsw-code-copy, .bsw-fold-toggle")
+        .forEach((n) => n.remove());
+      return String(clone.textContent || "").trim();
+    }
+    return String((block && block.textContent) || "").trim();
+  }
+
   function offsetForRenderedBlock(markdown, block) {
     if (!block || !markdown) return { offset: 0, matched: false };
+    if (block.classList && block.classList.contains("bsw-fm-container")) {
+      return { offset: 0, matched: true };
+    }
     const md = String(markdown);
-    const snippet = String(block.textContent || "").trim();
+    // Skip leading YAML frontmatter so body headings/paragraphs don't match
+    // inside `title:` / `description:` frontmatter fields.
+    const fmMatch = md.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/);
+    const bodyStart = fmMatch ? fmMatch[0].length : 0;
+    const bodyMd = bodyStart > 0 ? md.slice(bodyStart) : md;
+
+    const snippet = cleanBlockText(block);
     const firstLine = snippet.split("\n")[0].trim();
+
+    const tag = block.tagName ? block.tagName.toUpperCase() : "";
+    if (/^H[1-6]$/.test(tag) && snippet) {
+      const level = Number(tag.charAt(1));
+      const escaped = snippet.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp("^(#{1," + level + "}\\s+)" + escaped, "m");
+      const m = bodyMd.match(re);
+      if (m && m.index != null) {
+        return { offset: bodyStart + m.index + m[1].length, matched: true };
+      }
+    }
 
     const probes = [];
     if (firstLine.length >= 4) probes.push(firstLine);
     if (snippet.length >= 6) probes.push(snippet.slice(0, Math.min(200, snippet.length)));
 
     for (const probe of probes) {
-      const idx = md.indexOf(probe);
+      const idx = md.indexOf(probe, bodyStart);
       if (idx >= 0) return { offset: idx, matched: true };
-    }
-
-    const tag = block.tagName ? block.tagName.toUpperCase() : "";
-    if (/^H[1-6]$/.test(tag) && snippet) {
-      const level = Number(tag.charAt(1));
-      const escaped = snippet.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp("^#{1," + level + "}\\s+" + escaped, "m");
-      const m = md.match(re);
-      if (m && m.index != null) return { offset: m.index, matched: true };
     }
 
     // Inline-syntax-tolerant fallback: rendered text often differs from
@@ -507,7 +528,7 @@
     if (tokens.length >= 1) {
       const first = tokens[0];
       const window = Math.max(80, first.length * 8);
-      let searchFrom = 0;
+      let searchFrom = bodyStart;
       while (searchFrom < md.length) {
         const idx = md.indexOf(first, searchFrom);
         if (idx < 0) break;
@@ -630,7 +651,16 @@
           range.setEndBefore(node.childNodes[idx]);
         }
       }
-      textBefore = range.toString();
+      if (typeof range.cloneContents === "function") {
+        const frag = range.cloneContents();
+        if (frag && typeof frag.querySelectorAll === "function") {
+          frag.querySelectorAll(".bsw-heading-anchor, .bsw-code-copy, .bsw-fold-toggle")
+            .forEach((n) => n.remove());
+        }
+        textBefore = String(frag.textContent || "");
+      } else {
+        textBefore = range.toString();
+      }
     } catch (_) {
       return blockMap;
     }
