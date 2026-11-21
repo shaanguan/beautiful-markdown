@@ -484,11 +484,13 @@
     // phrasing content inside <button>) and sits 4px below the label.
     btn.innerHTML = FOLDER_ICON +
       '<span class="bsw-pick-textstack">' +
-        '<span class="bsw-pick-label">' + label + '</span>' +
+        '<span class="bsw-pick-label"></span>' +
         '<span class="bsw-split-empty-note bsw-open-paste-hint">' +
           "Or press <kbd>" + mod + "</kbd> + <kbd>V</kbd> to paste Markdown" +
         '</span>' +
       '</span>';
+    const pickLabelEl = btn.querySelector(".bsw-pick-label");
+    if (pickLabelEl) pickLabelEl.textContent = label || "";
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       onPick();
@@ -844,17 +846,17 @@
       if (lastWidth === "split") {
         if (!splitOn) enableSplit();
         if (switcherRef) switcherRef.setWidth("split");
-        if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-          mainChromeHandle.setActiveWidth("split");
-        }
+        Promise.resolve(mainChromeHandle).then((h) => {
+          if (h && typeof h.setActiveWidth === "function") h.setActiveWidth("split");
+        });
         return;
       }
       if (splitOn) return;
       applyWidth(lastWidth);
       if (switcherRef) switcherRef.setWidth(lastWidth);
-      if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-        mainChromeHandle.setActiveWidth(lastWidth);
-      }
+      Promise.resolve(mainChromeHandle).then((h) => {
+        if (h && typeof h.setActiveWidth === "function") h.setActiveWidth(lastWidth);
+      });
     }
 
     // Lazy scaffold: for the blank-tab empty state we skip the 11-layer
@@ -1177,9 +1179,14 @@
       search.placeholder = "搜索标题或内容…";
       search.value = filterText || "";
       search.addEventListener("click", (ev) => ev.stopPropagation());
+      let searchTimer = 0;
       search.addEventListener("input", (ev) => {
         ev.stopPropagation();
-        paintItems(search.value);
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          searchTimer = 0;
+          paintItems(search.value);
+        }, 120);
       });
       heading.appendChild(search);
       wrap.appendChild(heading);
@@ -1292,9 +1299,9 @@
       } else {
         disableSplit();
       }
-      if (mainChromeHandle && typeof mainChromeHandle.reconnectSpy === "function") {
-        mainChromeHandle.reconnectSpy();
-      }
+      Promise.resolve(mainChromeHandle).then((h) => {
+        if (h && typeof h.reconnectSpy === "function") h.reconnectSpy();
+      });
       updateTranslateUi();
       persistReadingPrefs();
       scheduleTabSessionPersist();
@@ -1349,7 +1356,10 @@
       // Download via background and cache path
       var folders = { slides: "AI Slides", report: "AI Report", dashboard: "AI Dashboard" };
       var folder = folders[mode] || "AI Slides";
-      var base = (sourceName || "document").replace(/\.[^.]+$/, "");
+      var rawBase = (sourceName || "document").replace(/\.[^.]+$/, "");
+      var base = root.BaselineShared && typeof root.BaselineShared.sanitizeFilenamePart === "function"
+        ? root.BaselineShared.sanitizeFilenamePart(rawBase, "document")
+        : rawBase;
       var dlFilename = "Beautiful Markdown/" + folder + "/" + base + ".html";
       chrome.runtime.sendMessage({
         type: "downloadEditorial",
@@ -1867,6 +1877,9 @@
 
     async function openRecentEntry(entry, side) {
       if (entry.kind === "url" && entry.url) {
+        let parsedUrl;
+        try { parsedUrl = new URL(entry.url); } catch (_) { return; }
+        if (!["http:", "https:", "file:"].includes(parsedUrl.protocol)) return;
         const target = side === "right" ? "right" : "left";
         if (splitOn || side === "right") {
           if (!confirmDiscardIfDirty(target)) return;
@@ -2064,7 +2077,7 @@
       }
 
       syncSplitEmptyAreaClick();
-      renderPreviewMarkdown(sizer, text, lastPreset)
+      return renderPreviewMarkdown(sizer, text, lastPreset)
         .then(() => {
           bumpSplitLoaded();
           if (preserveScroll) {
@@ -2122,6 +2135,7 @@
       }
       splitView = null;
       splitPreview = null;
+      destroyChromeHandle(splitChromeHandle);
       splitChromeHandle = null;
       splitMountEl = null;
       ui.splitMountEl = null;
@@ -2272,9 +2286,9 @@
     // after chrome exists when the remembered preference is split.
     if (lastWidth === "split" && !splitOn) {
       enableSplit();
-      if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-        mainChromeHandle.setActiveWidth("split");
-      }
+      Promise.resolve(mainChromeHandle).then((h) => {
+        if (h && typeof h.setActiveWidth === "function") h.setActiveWidth("split");
+      });
       switcher.setWidth("split");
     }
 
@@ -2313,9 +2327,9 @@
         lastWidth = "split";
         switcher.setWidth("split");
         enableSplit();
-        if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-          mainChromeHandle.setActiveWidth("split");
-        }
+        Promise.resolve(mainChromeHandle).then((h) => {
+          if (h && typeof h.setActiveWidth === "function") h.setActiveWidth("split");
+        });
         const splitMd = saved.splitMarkdown == null ? "" : String(saved.splitMarkdown);
         if (splitMd.trim()) {
           splitFromLocalFile = !!saved.splitFromLocalFile;
@@ -2328,9 +2342,9 @@
         lastWidth = saved.width;
         switcher.setWidth(lastWidth);
         applyWidth(lastWidth);
-        if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-          mainChromeHandle.setActiveWidth(lastWidth);
-        }
+        Promise.resolve(mainChromeHandle).then((h) => {
+          if (h && typeof h.setActiveWidth === "function") h.setActiveWidth(lastWidth);
+        });
       }
       scheduleTabSessionPersist();
     }

@@ -69,19 +69,56 @@
     const raw = P.getShaderNoiseTexture();
     noiseReady = (raw.decode ? raw.decode() : Promise.resolve())
       .then(() => raw)
-      .catch(() => loadImage(raw.src));
+      .catch(() => loadImage(raw.src))
+      .catch((err) => {
+        noiseReady = null;
+        throw err;
+      });
     return noiseReady;
   }
 
   function waitFrames(n) {
+    if (typeof document !== "undefined" && document.hidden) {
+      return new Promise((resolve) => setTimeout(resolve, 16));
+    }
     return new Promise((resolve) => {
       let left = n;
       const step = () => {
         left -= 1;
         if (left <= 0) resolve();
+        else if (typeof document !== "undefined" && document.hidden) setTimeout(resolve, 16);
         else requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
+    });
+  }
+
+  function canvasToTextureUrl(canvas) {
+    return new Promise((resolve, reject) => {
+      const fallbackToDataUrl = () => {
+        try {
+          const dataUrl = canvas.toDataURL("image/png");
+          if (!dataUrl || dataUrl.length < 100) {
+            reject(new Error("empty paper texture data URL"));
+            return;
+          }
+          resolve(dataUrl);
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      if (typeof canvas.toBlob === "function") {
+        canvas.toBlob((blob) => {
+          if (blob && blob.size > 0) {
+            resolve(URL.createObjectURL(blob));
+            return;
+          }
+          fallbackToDataUrl();
+        }, "image/webp", 0.85);
+      } else {
+        fallbackToDataUrl();
+      }
     });
   }
 
@@ -123,7 +160,7 @@
   }
 
   /**
-   * Bake PaperTexture to a PNG data URL.
+   * Bake PaperTexture to a tileable WebP object URL (falling back to PNG data URL).
    * @param {number} cssW
    * @param {number} cssH
    * @param {boolean} dark
@@ -133,9 +170,10 @@
     const P = api();
     if (!P) throw new Error("PaperShaders missing");
 
-    // Match docs example size (1280×720); stretch via CSS to the reading view.
+    // Fixed tileable square (1280×1280) repeated vertically via CSS so cache
+    // keys stay stable across document heights and fibers never stretch.
     const w = 1280;
-    const h = Math.max(720, Math.min(1600, Math.round((cssH || 720) * (1280 / Math.max(cssW || 1280, 1)))));
+    const h = 1280;
     const key = (dark ? "d" : "l") + ":" + w + "x" + h + ":v8-bright";
     if (cache.has(key)) return cache.get(key);
 
@@ -157,6 +195,7 @@
     document.documentElement.appendChild(host);
 
     let mount = null;
+    let canvas = null;
     try {
       mount = new P.ShaderMount(
         host,
@@ -166,6 +205,7 @@
         0,
         0
       );
+      canvas = mount.canvasElement;
 
       // ResizeObserver is unreliable for offscreen hosts (and in some
       // extension/file:// timings). Force layout size + a draw.
@@ -180,22 +220,32 @@
       if (typeof mount.setFrame === "function") mount.setFrame(0);
       await waitFrames(1);
 
-      const canvas = mount.canvasElement;
+      canvas = mount.canvasElement;
       if (!canvas || canvas.width < 2 || canvas.height < 2) {
         throw new Error("PaperTexture canvas has no size (" + (canvas && canvas.width) + "x" + (canvas && canvas.height) + ")");
       }
-      const url = canvas.toDataURL("image/png");
-      if (!url || url.length < 100) throw new Error("empty paper texture data URL");
+      const url = await canvasToTextureUrl(canvas);
 
       if (cache.size > 4) {
-        const first = cache.keys().next().value;
-        cache.delete(first);
+        const firstKey = cache.keys().next().value;
+        const evicted = cache.get(firstKey);
+        cache.delete(firstKey);
+        if (typeof evicted === "string" && evicted.startsWith("blob:")) {
+          try { URL.revokeObjectURL(evicted); } catch (_) { /* ignore */ }
+        }
       }
       cache.set(key, url);
       return url;
     } finally {
       try {
         if (mount) mount.dispose();
+      } catch (_) { /* ignore */ }
+      try {
+        const gl = canvas && canvas.getContext("webgl2");
+        if (gl) {
+          const ext = gl.getExtension("WEBGL_lose_context");
+          if (ext) ext.loseContext();
+        }
       } catch (_) { /* ignore */ }
       try {
         host.remove();
@@ -206,8 +256,7 @@
   /**
    * Apply baked paper texture onto the reading-view layer.
    * @param {HTMLElement} layer
-   * @param {HTMLElement} view
-   * @param {{ dark?: boolean }} [opts]
+   * @param {{ dark?: boolean, view?: HTMLElement }} [opts]
    * @returns {Promise<boolean>}
    */
   async function mountPaperTexture(layer, opts) {
@@ -237,16 +286,17 @@
 
       const cssUrl = 'url("' + url + '")';
       layer.style.backgroundImage = cssUrl;
-      layer.style.backgroundRepeat = "no-repeat";
-      layer.style.backgroundSize = "100% 100%";
+      layer.style.backgroundRepeat = "repeat-y";
+      layer.style.backgroundSize = "100% auto";
       layer.style.backgroundPosition = "top center";
       // Mark as ready (no live WebGL mount).
       layer.dataset.bswPaperReady = "1";
+      // Paint only on .bsw-paper-noise; clear any stale background on .markdown-reading-view.
       if (view) {
-        view.style.backgroundImage = cssUrl;
-        view.style.backgroundRepeat = "no-repeat";
-        view.style.backgroundSize = "100% 100%";
-        view.style.backgroundPosition = "top center";
+        view.style.removeProperty("background-image");
+        view.style.removeProperty("background-size");
+        view.style.removeProperty("background-repeat");
+        view.style.removeProperty("background-position");
       }
       return true;
     } catch (e) {

@@ -142,6 +142,59 @@
         }
       },
       {
+        // KaTeX color shim. Many existing docs colorize @mentions/headings
+        // by abusing math mode with \color, e.g.
+        //   $\color{#0089FF}{@Alice}\color{#0089FF}{@Bob}$
+        // KaTeX renders this as math-styled glyphs (wrong font, wrong
+        // spacing, parentheses get butchered) and Obsidian falls back to
+        // showing the raw source. Intercept the pattern when the entire
+        // $...$ contains ONLY \color macros (no actual math) and emit
+        // spans. Bare \color{X}{Y} outside math is handled too.
+        //
+        // Whitelisted via isSafeColor — if any color value is rejected,
+        // the token is skipped and the text falls through to KaTeX
+        // (or pass-through literal), so a typo never injects CSS.
+        name: "katexColorShim",
+        level: "inline",
+        start(src) {
+          const a = src.indexOf("$\\color");
+          const b = src.indexOf("\\color");
+          if (a < 0 && b < 0) return undefined;
+          if (a < 0) return b;
+          if (b < 0) return a;
+          return a < b ? a : b;
+        },
+        tokenizer(src) {
+          // Case A: $...$ wrapper containing one or more \color{X}{Y}
+          // macros and nothing else (whitespace allowed between them).
+          // Anything else inside the $...$ → leave it for KaTeX.
+          let m = /^\$\s*((?:\\color\s*\{\s*[^{}\n]+?\s*\}\s*\{\s*[^{}\n]+?\s*\}\s*)+)\$/.exec(src);
+          if (m) {
+            const parts = collectColorParts(m[1]);
+            if (!parts) return; // bad color → don't claim, let KaTeX try
+            return { type: "katexColorShim", raw: m[0], parts };
+          }
+          // Case B: bare \color{X}{Y} sitting in regular prose. Only one
+          // pair — chains in prose are rare and would already render fine
+          // as spans repeated by the user.
+          m = /^\\color\s*\{\s*([^{}\n]+?)\s*\}\s*\{\s*([^{}\n]+?)\s*\}/.exec(src);
+          if (m) {
+            const color = m[1].trim();
+            if (!isSafeColor(color)) return;
+            return {
+              type: "katexColorShim",
+              raw: m[0],
+              parts: [{ color, text: m[2].trim() }]
+            };
+          }
+        },
+        renderer(token) {
+          return token.parts.map((p) =>
+            `<span style="color:${p.color}">${escapeHTML(p.text)}</span>`
+          ).join("");
+        }
+      },
+      {
         // Math: capture $$...$$ and $...$ BEFORE superscript / subscript /
         // any other inline tokenizer can chew on the ^ / ~ chars inside the
         // formula. We don't render the math here — we emit the literal
@@ -347,7 +400,7 @@
           const m = src.match(/(?:^|[\s([{>"]):([a-z0-9_+-]{2,}):/i);
           if (!m) return undefined;
           const needle = ":" + m[1] + ":";
-          return src.indexOf(needle);
+          return m.index + (m[0].length - needle.length);
         },
         tokenizer(src) {
           const m = /^:([a-z0-9_+-]{2,}):/i.exec(src);
@@ -380,59 +433,6 @@
         renderer(token) {
           const tn = escapeHTML(token.tagName);
           return `<a href="#tag-${tn}" class="tag" data-tag="${tn}">#${tn}</a>`;
-        }
-      },
-      {
-        // KaTeX color shim. Many existing docs colorize @mentions/headings
-        // by abusing math mode with \color, e.g.
-        //   $\color{#0089FF}{@Alice}\color{#0089FF}{@Bob}$
-        // KaTeX renders this as math-styled glyphs (wrong font, wrong
-        // spacing, parentheses get butchered) and Obsidian falls back to
-        // showing the raw source. Intercept the pattern when the entire
-        // $...$ contains ONLY \color macros (no actual math) and emit
-        // spans. Bare \color{X}{Y} outside math is handled too.
-        //
-        // Whitelisted via isSafeColor — if any color value is rejected,
-        // the token is skipped and the text falls through to KaTeX
-        // (or pass-through literal), so a typo never injects CSS.
-        name: "katexColorShim",
-        level: "inline",
-        start(src) {
-          const a = src.indexOf("$\\color");
-          const b = src.indexOf("\\color");
-          if (a < 0 && b < 0) return undefined;
-          if (a < 0) return b;
-          if (b < 0) return a;
-          return a < b ? a : b;
-        },
-        tokenizer(src) {
-          // Case A: $...$ wrapper containing one or more \color{X}{Y}
-          // macros and nothing else (whitespace allowed between them).
-          // Anything else inside the $...$ → leave it for KaTeX.
-          let m = /^\$\s*((?:\\color\s*\{\s*[^{}\n]+?\s*\}\s*\{\s*[^{}\n]+?\s*\}\s*)+)\$/.exec(src);
-          if (m) {
-            const parts = collectColorParts(m[1]);
-            if (!parts) return; // bad color → don't claim, let KaTeX try
-            return { type: "katexColorShim", raw: m[0], parts };
-          }
-          // Case B: bare \color{X}{Y} sitting in regular prose. Only one
-          // pair — chains in prose are rare and would already render fine
-          // as spans repeated by the user.
-          m = /^\\color\s*\{\s*([^{}\n]+?)\s*\}\s*\{\s*([^{}\n]+?)\s*\}/.exec(src);
-          if (m) {
-            const color = m[1].trim();
-            if (!isSafeColor(color)) return;
-            return {
-              type: "katexColorShim",
-              raw: m[0],
-              parts: [{ color, text: m[2].trim() }]
-            };
-          }
-        },
-        renderer(token) {
-          return token.parts.map((p) =>
-            `<span style="color:${p.color}">${escapeHTML(p.text)}</span>`
-          ).join("");
         }
       },
       {

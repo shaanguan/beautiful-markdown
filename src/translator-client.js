@@ -109,25 +109,37 @@
     return out;
   }
 
+  function cloneDefaults() {
+    return typeof structuredClone === "function"
+      ? structuredClone(DEFAULTS)
+      : JSON.parse(JSON.stringify(DEFAULTS));
+  }
+
   function loadSettings() {
     return new Promise((resolve) => {
       try {
         chrome.storage.local.get({ [STORAGE_KEY]: {} }, (items) => {
+          if (chrome.runtime.lastError || !items) {
+            resolve(cloneDefaults());
+            return;
+          }
           const stored = items[STORAGE_KEY] || {};
-          const merged = Object.assign({}, DEFAULTS, stored);
+          const merged = Object.assign(cloneDefaults(), stored);
           merged.sourceLanguage = normalizeLang(merged.sourceLanguage);
           merged.targetLanguage = normalizeLang(merged.targetLanguage);
           merged.providerCredentials = normalizeProviderCredentials(stored);
           resolve(merged);
         });
       } catch (_) {
-        resolve(Object.assign({}, DEFAULTS));
+        resolve(cloneDefaults());
       }
     });
   }
 
+  let saveChain = Promise.resolve();
+
   function saveSettings(partial) {
-    return new Promise((resolve, reject) => {
+    const run = () => new Promise((resolve, reject) => {
       loadSettings().then((curr) => {
         const next = Object.assign({}, curr, partial || {});
 
@@ -164,6 +176,9 @@
         }
       }, reject);
     });
+    const nextPromise = saveChain.then(run, run);
+    saveChain = nextPromise.catch(() => {});
+    return nextPromise;
   }
 
   root.BaselineTranslator = {

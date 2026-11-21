@@ -78,7 +78,7 @@ body.theme-dark {
   --background-modifier-border: #363636;
   --background-modifier-border-hover: #454545;
   --background-modifier-border-focus: var(--bsw-hero-blue);
-  --background-modifier-hover: rgba(26, 52, 129, 0.05);
+  --background-modifier-hover: rgba(255, 255, 255, 0.08);
   --code-background: var(--background-secondary);
   --code-normal: var(--text-normal);
   --tag-background: rgba(90, 166, 241, 0.18);
@@ -1681,7 +1681,7 @@ pre.mermaid {
   --bsw-accent: var(--bsw-hero-blue);
   --bsw-toggle-icon: #b1bac4;
   --bsw-toggle-icon-hover: #e6edf3;
-  --bsw-hover-bg: rgba(26, 52, 129, 0.05);
+  --bsw-hover-bg: rgba(255, 255, 255, 0.08);
   --bsw-active-bg: rgba(90, 166, 241, 0.16);
   --bsw-segment-bg: rgba(255, 255, 255, 0.06);
   --bsw-segment-pill-bg: #2f343c;
@@ -3832,7 +3832,7 @@ body.theme-dark .bsw-column-toc .bsw-toc-close:hover {
 }
 .bsw-column-toc .bsw-toc-item:hover {
   background: transparent;
-  color: var(--bsw-accent, #2241F4);
+  color: var(--interactive-accent, #2241F4);
 }
 
 /* Dark theme — the same gradient, but mapped to lighter shades so each
@@ -3851,7 +3851,7 @@ body.theme-dark .bsw-column-toc .bsw-toc-item[data-level="4"] {
 }
 body.theme-dark .bsw-column-toc .bsw-toc-item:hover {
   background: transparent;
-  color: var(--bsw-accent, #2241F4);
+  color: var(--interactive-accent, #5aa6f1);
 }
 
 .bsw-column-toc .bsw-toc-item.is-active {
@@ -4080,7 +4080,11 @@ body.theme-dark #bsw-md-hint .bsw-md-hint-close:hover {
   .bsw-doc-tools,
   .bsw-selection-menu,
   .bsw-heading-anchor,
-  .bsw-code-copy {
+  .bsw-code-copy,
+  body::before,
+  .bsw-paper-noise,
+  .bsw-panel-backdrop,
+  .bsw-hover-hint {
     display: none !important;
   }
   /* Frontmatter: show expanded on print. */
@@ -4095,13 +4099,35 @@ body.theme-dark #bsw-md-hint .bsw-md-hint-close:hover {
     display: block !important;
   }
 
+  html,
+  body,
+  .app-container,
+  .workspace-leaf-content,
+  .view-content {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
   html, body {
     background: #ffffff !important;
     color: #1f2328 !important;
   }
 
+  body,
+  .markdown-preview-view.markdown-rendered {
+    --text-normal: #1f2328;
+    --text-muted: #57606a;
+    --background-primary: #ffffff;
+    --background-secondary: #f6f8fa;
+  }
+
   .markdown-reading-view {
     padding: 0 !important;
+    background: none !important;
+  }
+  .view-content.bsw-toc-expanded > .bsw-content-wrap {
+    padding-right: 0 !important;
   }
   .markdown-preview-view.markdown-rendered,
   .markdown-preview-sizer.markdown-preview-section {

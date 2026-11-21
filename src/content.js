@@ -52,11 +52,13 @@
   async function fetchRawMarkdown() {
     if (isBaselineRenderedPage()) {
       const res = await fetch(location.href);
+      if (!res.ok) throw new Error("HTTP " + res.status);
       return await res.text();
     }
     const pre = document.body.querySelector(":scope > pre");
     if (pre && pre.textContent && pre.textContent.length > 0) return pre.textContent;
     const res = await fetch(location.href);
+    if (!res.ok) throw new Error("HTTP " + res.status);
     return await res.text();
   }
 

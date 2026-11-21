@@ -69,7 +69,7 @@
     // Order matters: bigger structural blocks first, so a code fence isn't
     // chewed up by the inline-code regex.
     protect(/^---\r?\n[\s\S]*?\r?\n---(?=\r?\n|$)/);
-    protect(/(^|\r?\n)(```|~~~)[\s\S]*?(?:\r?\n\2[^\r\n]*|$)/g, true);
+    protect(/(^|\r?\n)(`{3,}|~{3,})[\s\S]*?(?:\r?\n\2[^\r\n]*|$)/g, true);
     protect(/<!--[\s\S]*?-->/g);
     protect(/\$\$[\s\S]*?\$\$/g);
 
@@ -84,7 +84,7 @@
     protect(/^\s*\[[^\]\r\n]+\]:\s+\S+.*$/gm);
     protect(/\[\^[^\]\r\n]+\]/g);
     protect(/`[^`\r\n]+`/g);
-    protect(/\$[^$\r\n]+\$/g);
+    protect(/(?<!\\)\$(?!\s)(?:[^$\r\n\\]|\\.)+?(?<!\s)\$(?!\d)/g);
     protect(/<(?:https?:\/\/|mailto:)[^>\s]+>/g);
     protect(/\bhttps?:\/\/[^\s<>()]+/g);
     protect(/<\/?[A-Za-z][^>\r\n]*>/g);

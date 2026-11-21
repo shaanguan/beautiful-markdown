@@ -129,7 +129,6 @@
   // Flips below the anchor when the anchor sits too close to the top of the
   // viewport (e.g. the top-right doc tools), so the toast never lands off
   // the visible area.
-  let toastTimer = null;
   function showToast(near, message) {
     let toast = document.getElementById("baseline-toast");
     if (!toast) {
@@ -157,8 +156,11 @@
     toast.classList.toggle("is-below", flipBelow);
     toast.style.top = Math.round(flipBelow ? anchorBottom + 4 : anchorTop - 4) + "px";
     toast.classList.add("is-visible");
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 1400);
+    if (toast._bswHideTimer) clearTimeout(toast._bswHideTimer);
+    toast._bswHideTimer = setTimeout(() => {
+      toast._bswHideTimer = null;
+      toast.classList.remove("is-visible");
+    }, 1400);
   }
 
   // ── TOC sidebar ────────────────────────────────────────────────────
@@ -263,7 +265,7 @@
       });
     };
 
-    const setActive = (a, headingEl) => {
+    const setActive = (a, headingEl, opts) => {
       if (activeEl === a) return;
       if (activeEl) activeEl.classList.remove("is-active");
       activeEl = a;
@@ -280,6 +282,7 @@
       detachDriftScroll();
       if (!a) return;
       a.classList.add("is-active");
+      if (opts && opts.watchDrift === false) return;
       // Wait out the smooth scroll, then start watching for drift. We also
       // re-check on the timer fire in case the scroll already settled but
       // no further scroll events will come (so onDriftScroll wouldn't run).
@@ -346,6 +349,7 @@
     for (const h of index) {
       const tick = document.createElement("button");
       tick.type = "button";
+      tick.tabIndex = -1;
       tick.className = "bsw-toc-tick";
       tick.dataset.id = h.id;
       tick.dataset.level = String(Math.min(h.level - minLevel + 1, 4));
@@ -390,6 +394,7 @@
       return { disconnect: () => {}, pinTo: () => {} };
     }
     const scroller = getScroller();
+    const headingById = new Map(index.map((h) => [h.id, h.el]));
     let lastId = null;
     let pinnedId = null;
     let pinnedUntil = 0;
@@ -406,14 +411,15 @@
       if (tick) tick.classList.add("is-active");
       // Mirror to panel so opening the overlay shows the same active row.
       const item = id ? itemEls.get(id) : null;
-      if (item) setPanelActive(item);
+      const headingEl = id ? headingById.get(id) : null;
+      if (item) setPanelActive(item, headingEl, { watchDrift: false });
     };
     const pinTo = (id) => {
       pinnedId = id;
       pinnedUntil = Date.now() + 500;
       apply(id);
     };
-    let io, scrollTarget, onScroll;
+    let io, scrollTarget, onScroll, scrollRaf = 0;
     const wire = () => {
       const sc = getScroller();
       io = new IntersectionObserver(
@@ -431,16 +437,24 @@
       }
       scrollTarget = sc || window;
       onScroll = () => {
-        const el = sc || document.scrollingElement || document.documentElement;
-        if (!el || !index.length) return;
-        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
-        if (atBottom) apply(index[index.length - 1].id);
+        if (scrollRaf) return;
+        scrollRaf = requestAnimationFrame(() => {
+          scrollRaf = 0;
+          const el = sc || document.scrollingElement || document.documentElement;
+          if (!el || !index.length) return;
+          const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+          if (atBottom) apply(index[index.length - 1].id);
+        });
       };
       scrollTarget.addEventListener("scroll", onScroll, { passive: true });
     };
     const teardown = () => {
       if (io) io.disconnect();
       if (scrollTarget) scrollTarget.removeEventListener("scroll", onScroll);
+      if (scrollRaf) {
+        cancelAnimationFrame(scrollRaf);
+        scrollRaf = 0;
+      }
     };
     wire();
     return {
@@ -571,6 +585,11 @@
     if (!contentWrap) return null;
     const tools = ensureToolsRow(contentWrap);
 
+    if (typeof tools._bswDocActionsCleanup === "function") {
+      tools._bswDocActionsCleanup();
+      tools._bswDocActionsCleanup = null;
+    }
+
     // Re-render: drop existing width dropdown + action buttons before
     // re-adding so streaming refreshes don't stack duplicates.
     for (const old of tools.querySelectorAll(
@@ -642,6 +661,8 @@
     // AI dropdown — translate + editorial layout modes.
     let edDropdown = null;
     let edMenu = null;
+    let edExpandBtn = null;
+    let edLangList = null;
     let transDropdown = null;
     let transMenu = null;
     if (opts && typeof opts.onEditorial === "function") {
@@ -711,10 +732,12 @@
           '<span class="bsw-width-option-label">AI Translate</span>';
         transLabel.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          edMenu.hidden = true;
-          edTrigger.setAttribute("aria-expanded", "false");
+          closeAllMenus();
           Promise.resolve(opts.onTranslateWithLang(suggested)).then((res) => {
             if (res && res.error) showToast(edTrigger, res.error);
+          }).catch((err) => {
+            console.warn("[Baseline] translate failed:", err);
+            showToast(edTrigger, (err && err.message) || "Translation failed");
           });
         });
 
@@ -722,12 +745,15 @@
         expandBtn.type = "button";
         expandBtn.className = "bsw-ai-translate-expand";
         expandBtn.setAttribute("aria-label", "选择语言");
+        expandBtn.setAttribute("aria-expanded", "false");
         expandBtn.innerHTML =
           '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>';
 
         const langList = document.createElement("div");
         langList.className = "bsw-ai-lang-list";
         langList.hidden = true;
+        edExpandBtn = expandBtn;
+        edLangList = langList;
 
         var langs = opts.translateLanguages.slice();
         var si = langs.indexOf(suggested);
@@ -743,10 +769,12 @@
           langBtn.querySelector(".bsw-width-option-label").textContent = nativeNames[lang] || lang;
           langBtn.addEventListener("click", (ev) => {
             ev.stopPropagation();
-            edMenu.hidden = true;
-            edTrigger.setAttribute("aria-expanded", "false");
+            closeAllMenus();
             Promise.resolve(opts.onTranslateWithLang(lang)).then((res) => {
               if (res && res.error) showToast(edTrigger, res.error);
+            }).catch((err) => {
+              console.warn("[Baseline] translate failed:", err);
+              showToast(edTrigger, (err && err.message) || "Translation failed");
             });
           });
           langList.appendChild(langBtn);
@@ -756,6 +784,7 @@
           ev.stopPropagation();
           langList.hidden = !langList.hidden;
           expandBtn.classList.toggle("is-open", !langList.hidden);
+          expandBtn.setAttribute("aria-expanded", String(!langList.hidden));
         });
 
         transRow.appendChild(transLabel);
@@ -776,10 +805,12 @@
         item.querySelector(".bsw-width-option-label").textContent = mode.label;
         item.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          edMenu.hidden = true;
-          edTrigger.setAttribute("aria-expanded", "false");
+          closeAllMenus();
           Promise.resolve(opts.onEditorial(mode.value)).then((res) => {
             if (res && res.error) showToast(edTrigger, res.error);
+          }).catch((err) => {
+            console.warn("[Baseline] editorial failed:", err);
+            showToast(edTrigger, (err && err.message) || "Action failed");
           });
         });
         edMenu.appendChild(item);
@@ -830,7 +861,9 @@
         widthTrigger.setAttribute("aria-label", cur.label);
       }
       for (const [v, el] of widthOptionEls) {
-        el.classList.toggle("is-active", v === value);
+        const active = v === value;
+        el.classList.toggle("is-active", active);
+        el.setAttribute("aria-checked", String(active));
       }
     }
     if (withWidthControls && widthOptions.length && opts && typeof opts.onWidthChange === "function") {
@@ -896,7 +929,24 @@
         var et = edDropdown && edDropdown.querySelector(".bsw-width-trigger");
         if (et) et.setAttribute("aria-expanded", "false");
       }
+      if (edLangList && !edLangList.hidden) {
+        edLangList.hidden = true;
+        if (edExpandBtn) {
+          edExpandBtn.classList.remove("is-open");
+          edExpandBtn.setAttribute("aria-expanded", "false");
+        }
+      }
     }
+    const cleanupDocListeners = () => {
+      if (docClickHandler) document.removeEventListener("click", docClickHandler);
+      if (docKeyHandler) document.removeEventListener("keydown", docKeyHandler);
+      document.removeEventListener("bsw:panel-open", closeAllMenus);
+      docClickHandler = null;
+      docKeyHandler = null;
+      if (tools._bswDocActionsCleanup === cleanupDocListeners) {
+        tools._bswDocActionsCleanup = null;
+      }
+    };
     if (widthDropdown || transDropdown || edDropdown) {
       docClickHandler = (ev) => {
         if (widthDropdown && widthDropdown.contains(ev.target)) return;
@@ -910,6 +960,7 @@
       document.addEventListener("click", docClickHandler);
       document.addEventListener("keydown", docKeyHandler);
       document.addEventListener("bsw:panel-open", closeAllMenus);
+      tools._bswDocActionsCleanup = cleanupDocListeners;
     }
 
     // Copy — raw markdown to clipboard.
@@ -940,9 +991,7 @@
 
     return {
       destroy() {
-        if (docClickHandler) document.removeEventListener("click", docClickHandler);
-        if (docKeyHandler) document.removeEventListener("keydown", docKeyHandler);
-        document.removeEventListener("bsw:panel-open", closeAllMenus);
+        cleanupDocListeners();
         for (const el of ownButtons) {
           if (el && el.parentNode) el.parentNode.removeChild(el);
         }

@@ -48,12 +48,13 @@
   // to plain escaped text so a huge block can't freeze rendering.
   const HLJS_MAX_HIGHLIGHT_CHARS = 50000;
 
-  // Per-render base URL for resolving relative images (set in renderTo).
-  let renderBaseUrl = "";
+  // Per-mountEl sequence counter so stale renders that awaited lazy vendors
+  // bail out before overwriting a newer render.
+  const renderSeqMap = new WeakMap();
 
-  // Allow file:/data:/blob:/chrome-extension: — DOMPurify's default URI
-  // whitelist strips them, which breaks local markdown images on file://
-  // pages after relative paths are resolved to absolute file: URLs.
+  // Keep the global URI whitelist restricted to web/mail/tel/relative schemes
+  // so <a href> cannot carry data:, blob:, file:, or chrome-extension: URLs.
+  // Safe image schemes are permitted on <img src> via the DOMPurify hook below.
   const PURIFY_OPTS = {
     ADD_ATTR: [
       "data-href", "data-alt", "data-tag", "target",
@@ -61,18 +62,40 @@
     ],
     ADD_TAGS: ["mark", "sub", "sup"],
     ALLOWED_URI_REGEXP:
-      /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data|blob|file|chrome-extension):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+      /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
   };
 
-  const IMG_SRC_SAFE =
-    /^(?:https?:|data:|blob:|file:|chrome-extension:)/i;
+  const SAFE_IMG_DATA_URI =
+    /^data:image\/(?:png|jpeg|jpg|gif|webp|avif|bmp);base64,/i;
 
-  function resolveImageHref(href) {
+  const IMG_SRC_SAFE =
+    /^(?:https?:|blob:|chrome-extension:|file:|data:image\/(?:png|jpeg|jpg|gif|webp|avif|bmp);base64,)/i;
+
+  let purifyHookInstalled = false;
+  function ensurePurifyHook() {
+    if (purifyHookInstalled || !DOMPurify || typeof DOMPurify.addHook !== "function") return;
+    purifyHookInstalled = true;
+    DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
+      if (!node || node.tagName !== "IMG" || data.attrName !== "src") return;
+      const val = (data.attrValue || "").trim();
+      if (
+        SAFE_IMG_DATA_URI.test(val) ||
+        /^blob:/i.test(val) ||
+        /^chrome-extension:/i.test(val) ||
+        (typeof location !== "undefined" && location.protocol === "file:" && /^file:/i.test(val))
+      ) {
+        data.forceKeepAttr = true;
+      }
+    });
+  }
+  ensurePurifyHook();
+
+  function resolveImageHref(href, base) {
     const raw = (href || "").trim();
     if (!raw || IMG_SRC_SAFE.test(raw)) return raw;
-    if (!renderBaseUrl) return raw;
+    if (!base) return raw;
     try {
-      return new URL(raw, renderBaseUrl).href;
+      return new URL(raw, base).href;
     } catch {
       return raw;
     }
@@ -86,7 +109,7 @@
     pedantic: false,
     renderer: {
       // Keep relative src as-is through sanitize; resolveImageUrls runs after
-      // with renderBaseUrl still set (absolute schemes pass through unchanged).
+      // with the render's base URL (absolute schemes pass through unchanged).
       image(href, title, text) {
         const src = escapeAttr((href || "").trim());
         const alt = escapeAttr(text || "");
@@ -265,16 +288,17 @@
   const RTL_CHAR =
     /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
-  function resolveImageUrls(mountEl) {
+  function resolveImageUrls(mountEl, base) {
     mountEl.querySelectorAll("img[src]").forEach((img) => {
       const attr = img.getAttribute("src");
       if (!attr) return;
-      const resolved = resolveImageHref(attr);
+      const resolved = resolveImageHref(attr, base);
       if (resolved && resolved !== attr) img.setAttribute("src", resolved);
     });
   }
 
-  function applyRtlDirection(mountEl) {
+  function applyRtlDirection(mountEl, sourceText) {
+    if (sourceText != null && !RTL_CHAR.test(sourceText)) return;
     const blocks = mountEl.querySelectorAll(
       "p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote, " +
       "figcaption, .callout, .admonition"
@@ -376,13 +400,15 @@
    * Render markdown source into a DOM tree (already attached to `mountEl`).
    * @param {string} source markdown text
    * @param {HTMLElement} mountEl container to mount into
-   * @param {{ baseUrl?: string }} [options]
+   * @param {{ baseUrl?: string, streaming?: boolean }} [options]
    */
   async function renderTo(source, mountEl, options) {
+    const seq = (renderSeqMap.get(mountEl) || 0) + 1;
+    renderSeqMap.set(mountEl, seq);
+
     const base =
       (options && options.baseUrl) ||
       (typeof location !== "undefined" ? location.href : "");
-    renderBaseUrl = base;
     const fmMatch = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
     const fmRaw = fmMatch ? fmMatch[1] : null;
     const stripped = fmMatch ? source.slice(fmMatch[0].length) : source;
@@ -402,36 +428,34 @@
     }
     if (vendorWaits.length) await Promise.all(vendorWaits);
 
-    let rawHtml;
-    try {
-      rawHtml = marked.parse(stripped);
-      const clean = DOMPurify.sanitize(rawHtml, PURIFY_OPTS);
-      mountEl.innerHTML = clean;
+    // Bail out if a newer renderTo() started on the same mountEl while
+    // we were awaiting lazy vendors.
+    if (renderSeqMap.get(mountEl) !== seq) return;
 
-      if (fmRaw) {
-        const entries = parseFrontmatter(fmRaw);
-        if (entries.length) {
-          const fmNode = buildFrontmatterDOM(entries);
-          if (wasExpanded) {
-            fmNode.classList.remove("is-collapsed");
-            fmNode.querySelector(".bsw-fm-heading")
-              .setAttribute("aria-expanded", "true");
-          }
-          mountEl.insertBefore(fmNode, mountEl.firstChild);
+    const rawHtml = marked.parse(stripped);
+    const clean = DOMPurify.sanitize(rawHtml, PURIFY_OPTS);
+    mountEl.innerHTML = clean;
+
+    if (fmRaw) {
+      const entries = parseFrontmatter(fmRaw);
+      if (entries.length) {
+        const fmNode = buildFrontmatterDOM(entries);
+        if (wasExpanded) {
+          fmNode.classList.remove("is-collapsed");
+          fmNode.querySelector(".bsw-fm-heading")
+            .setAttribute("aria-expanded", "true");
         }
+        mountEl.insertBefore(fmNode, mountEl.firstChild);
       }
-      if (!mountEl.dataset.bswFmDelegated) {
-        mountEl.dataset.bswFmDelegated = "1";
-        mountEl.addEventListener("click", handleFmToggle);
-        mountEl.addEventListener("keydown", handleFmKeydown);
-      }
-
-      // Resolve relative images while renderBaseUrl is still set.
-      resolveImageUrls(mountEl);
-      applyRtlDirection(mountEl);
-    } finally {
-      renderBaseUrl = "";
     }
+    if (!mountEl.dataset.bswFmDelegated) {
+      mountEl.dataset.bswFmDelegated = "1";
+      mountEl.addEventListener("click", handleFmToggle);
+      mountEl.addEventListener("keydown", handleFmKeydown);
+    }
+
+    resolveImageUrls(mountEl, base);
+    applyRtlDirection(mountEl, stripped);
 
     // KaTeX: render after DOM injection. Lazy-loaded above; absent only
     // when the doc has no math or the load failed (raw TeX stays visible).
@@ -472,7 +496,10 @@
     // (they would stack on the checkbox and break parent/child task layout).
     injectListFolds(mountEl);
     wrapTables(mountEl);
-    await runMermaid(mountEl);
+    if (!(options && options.streaming)) {
+      await runMermaid(mountEl);
+    }
+    if (renderSeqMap.get(mountEl) !== seq) return;
 
     // Promote first <h1> as document title for nicer browser tab.
     // Skip the write when unchanged — during streaming translation the
@@ -622,15 +649,22 @@
     // would honor any CSS-driven line-break/wrap rules along the way.
     const text = code.textContent;
     copyText(text).then(() => {
+      if (btn._bswCopyTimer) clearTimeout(btn._bswCopyTimer);
       btn.classList.add("is-copied");
       btn.textContent = "Copied";
-      window.setTimeout(() => {
+      btn._bswCopyTimer = window.setTimeout(() => {
+        btn._bswCopyTimer = 0;
         btn.classList.remove("is-copied");
         btn.textContent = "Copy";
       }, 1200);
     }).catch(() => {
+      if (btn._bswCopyTimer) clearTimeout(btn._bswCopyTimer);
+      btn.classList.remove("is-copied");
       btn.textContent = "Failed";
-      window.setTimeout(() => { btn.textContent = "Copy"; }, 1200);
+      btn._bswCopyTimer = window.setTimeout(() => {
+        btn._bswCopyTimer = 0;
+        btn.textContent = "Copy";
+      }, 1200);
     });
   }
 
@@ -842,19 +876,47 @@
       state === "done" ? "true" : state === "cancelled" ? "mixed" : "false");
   }
 
-  // Turn `<li>[-] text</li>` (which GFM left as plain text) into a real
-  // cancelled task item by prepending a checkbox and stripping the marker.
+  // Turn `<li>[-] text</li>` or `<li><p>[-] text</p></li>` (which GFM left as
+  // plain text) into a real cancelled task item by prepending a checkbox and
+  // stripping the marker.
   function promoteCancelledItems(mountEl) {
     for (const li of mountEl.querySelectorAll("li")) {
-      if (li.querySelector(":scope > input[type=checkbox]")) continue;
-      const first = li.firstChild;
-      if (!first || first.nodeType !== 3) continue;
-      const m = first.nodeValue.match(/^\s*\[-\]\s+/);
-      if (!m) continue;
-      first.nodeValue = first.nodeValue.slice(m[0].length);
+      if (
+        li.querySelector(":scope > input[type=checkbox]") ||
+        li.querySelector(":scope > p:first-child > input[type=checkbox]")
+      ) continue;
+      let target = null;
+      let textNode = null;
+      let match = null;
+      if (li.firstChild && li.firstChild.nodeType === 3) {
+        const m = li.firstChild.nodeValue.match(/^\s*\[-\]\s+/);
+        if (m) {
+          target = li;
+          textNode = li.firstChild;
+          match = m;
+        }
+      }
+      if (!match) {
+        const firstEl = li.firstElementChild;
+        if (
+          firstEl &&
+          firstEl.tagName === "P" &&
+          firstEl.firstChild &&
+          firstEl.firstChild.nodeType === 3
+        ) {
+          const m = firstEl.firstChild.nodeValue.match(/^\s*\[-\]\s+/);
+          if (m) {
+            target = firstEl;
+            textNode = firstEl.firstChild;
+            match = m;
+          }
+        }
+      }
+      if (!match) continue;
+      textNode.nodeValue = textNode.nodeValue.slice(match[0].length);
       const cb = document.createElement("input");
       cb.type = "checkbox";
-      li.insertBefore(cb, li.firstChild);
+      target.insertBefore(cb, target.firstChild);
       li.dataset.bswTask = "cancelled";
     }
   }
@@ -933,7 +995,7 @@
   function toggleFm(heading) {
     const container = heading.closest(".bsw-fm-container");
     if (!container) return;
-    const mountEl = container.closest(".markdown-preview-view") || container.parentElement;
+    const mountEl = container.closest(".markdown-preview-sizer") || container.parentElement;
     const willCollapse = !container.classList.contains("is-collapsed");
     container.classList.toggle("is-collapsed", willCollapse);
     heading.setAttribute("aria-expanded", willCollapse ? "false" : "true");

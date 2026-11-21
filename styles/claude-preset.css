@@ -27,6 +27,11 @@ html[data-bsw-preset="claude"] .markdown-preview-view ::selection {
   color: var(--text-normal);
 }
 
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view ::selection {
+  background-color: rgba(217, 119, 87, 0.35);
+  color: var(--text-normal);
+}
+
 html[data-bsw-preset="claude"] .markdown-preview-view :not(pre) > code {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   border: 0;
@@ -138,10 +143,11 @@ html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered table {
   color: var(--text-normal) !important;
 }
 
-/* Claude Docs gives data tables a wider working measure than prose. Preserve
-   the prose left axis, expand only toward the free right side, and collapse
-   back to the available column on narrow screens. */
-html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+/* Claude Docs gives top-level data tables and code blocks a wider working
+   measure than prose. Preserve the prose left axis, expand only toward the
+   free right side, and collapse back to the available column on narrow
+   screens, two-pane mode, expanded TOC, nested blocks, or print. */
+html[data-bsw-preset="claude"] body:not(.bsw-twopane-active) .app-container .view-content:not(.bsw-toc-expanded) .markdown-preview-view.markdown-rendered .markdown-preview-sizer > .bsw-table-wrap {
   width: min(56rem, calc(100vw - 2 * clamp(20px, 6vw, 80px))) !important;
   max-width: none !important;
 }
@@ -167,6 +173,24 @@ html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-re
 
 html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered pre {
   box-sizing: border-box !important;
+}
+
+html[data-bsw-preset="claude"] body:not(.bsw-twopane-active) .app-container .view-content:not(.bsw-toc-expanded) .markdown-preview-view.markdown-rendered .markdown-preview-sizer > pre {
   width: min(56rem, calc(100vw - 2 * clamp(20px, 6vw, 80px))) !important;
   max-width: none !important;
+}
+
+html[data-bsw-preset="claude"] body.bsw-twopane-active .app-container .markdown-preview-view.markdown-rendered :is(pre, .bsw-table-wrap),
+html[data-bsw-preset="claude"] .app-container .view-content.bsw-toc-expanded .markdown-preview-view.markdown-rendered :is(pre, .bsw-table-wrap),
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered :is(blockquote, li) :is(pre, .bsw-table-wrap) {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+@media print {
+  html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered :is(pre, .bsw-table-wrap),
+  html[data-bsw-preset="claude"] body:not(.bsw-twopane-active) .app-container .view-content:not(.bsw-toc-expanded) .markdown-preview-view.markdown-rendered .markdown-preview-sizer > :is(pre, .bsw-table-wrap) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 }

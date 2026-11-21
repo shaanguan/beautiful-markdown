@@ -2,7 +2,7 @@
   var DESIGN_W = 1280;
   var DESIGN_H = 720;
   var idx = 0;
-  var blobUrls = [];
+  var slidesHtmlList = [];
   var fadeTimer = null;
 
   var stage = document.getElementById("stage");
@@ -26,31 +26,31 @@
   }
 
   function renderSlide() {
-    if (blobUrls.length === 0) {
+    if (slidesHtmlList.length === 0) {
       counter.textContent = "0 / 0";
       prevBtn.disabled = true;
       nextBtn.disabled = true;
       return;
     }
     if (idx < 0) idx = 0;
-    if (idx > blobUrls.length - 1) idx = blobUrls.length - 1;
-    frame.src = blobUrls[idx];
-    counter.textContent = (idx + 1) + " / " + blobUrls.length;
+    if (idx > slidesHtmlList.length - 1) idx = slidesHtmlList.length - 1;
+    frame.srcdoc = slidesHtmlList[idx];
+    counter.textContent = (idx + 1) + " / " + slidesHtmlList.length;
     prevBtn.disabled = idx <= 0;
-    nextBtn.disabled = idx >= blobUrls.length - 1;
+    nextBtn.disabled = idx >= slidesHtmlList.length - 1;
     if (loading) loading.hidden = true;
   }
 
   function go(delta) {
     var next = idx + delta;
-    if (next < 0 || next >= blobUrls.length) return false;
+    if (next < 0 || next >= slidesHtmlList.length) return false;
     idx = next;
     renderSlide();
     return true;
   }
 
   function jumpTo(n) {
-    if (n < 1 || n > blobUrls.length) return false;
+    if (n < 1 || n > slidesHtmlList.length) return false;
     idx = n - 1;
     renderSlide();
     return true;
@@ -87,10 +87,15 @@
   });
 
   function handleKeydown(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "ArrowLeft" || e.key === "PageUp") { if (go(-1)) e.preventDefault(); }
-    else if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { if (go(1)) e.preventDefault(); }
+    else if (e.key === "ArrowRight" || e.key === "PageDown") { if (go(1)) e.preventDefault(); }
+    else if (e.key === " ") {
+      if (document.activeElement && document.activeElement.tagName === "BUTTON") return;
+      if (go(1)) e.preventDefault();
+    }
     else if (e.key === "Home") { if (jumpTo(1)) e.preventDefault(); }
-    else if (e.key === "End") { if (jumpTo(blobUrls.length)) e.preventDefault(); }
+    else if (e.key === "End") { if (jumpTo(slidesHtmlList.length)) e.preventDefault(); }
     else if (e.key === "f" || e.key === "F") { toggleFullscreen(); e.preventDefault(); }
     else if (e.key === "Escape") { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }
     else if (/^[0-9]$/.test(e.key)) {
@@ -100,27 +105,17 @@
   }
   document.addEventListener("keydown", handleKeydown);
 
+  var lastWakeTime = 0;
   function maybeWakeControls(e) {
     if (!e || typeof e.clientY !== "number") return;
-    if (e.clientY > window.innerHeight - 200) showControls();
+    var now = Date.now();
+    if (now - lastWakeTime < 100) return;
+    if (e.clientY > window.innerHeight - 200) {
+      lastWakeTime = now;
+      showControls();
+    }
   }
   document.addEventListener("mousemove", maybeWakeControls);
-
-  var shield = document.getElementById("event-shield");
-  if (shield) shield.addEventListener("mousemove", maybeWakeControls);
-
-  function bindIframeListeners() {
-    try {
-      var doc = frame.contentDocument;
-      if (!doc) return;
-      doc.addEventListener("mousemove", function (e) {
-        var rect = frame.getBoundingClientRect();
-        if (rect.top + e.clientY > window.innerHeight - 200) showControls();
-      });
-      doc.addEventListener("keydown", handleKeydown);
-    } catch (_) {}
-  }
-  frame.addEventListener("load", bindIframeListeners);
 
   if (typeof ResizeObserver !== "undefined") {
     new ResizeObserver(fitStage).observe(stageWrap);
@@ -133,12 +128,8 @@
     if (slides.length === 0) return;
 
     var fontBaseUrl = chrome.runtime.getURL("fonts/");
-    slides = slides.map(function (html) {
+    slidesHtmlList = slides.map(function (html) {
       return html.replace(/\.\.\/fonts\//g, fontBaseUrl);
-    });
-
-    blobUrls = slides.map(function (html) {
-      return URL.createObjectURL(new Blob([html], { type: "text/html" }));
     });
 
     idx = 0;
@@ -151,10 +142,10 @@
       loadSlides(result.slidesHtml);
       chrome.storage.session.remove("slidesHtml");
     }
-    if (loading && blobUrls.length === 0) {
-      loading.textContent = "No slides found";
-    }
-    if (loading && blobUrls.length > 0) {
+    if (slidesHtmlList.length === 0) {
+      renderSlide();
+      if (loading) loading.textContent = "No slides found";
+    } else if (loading) {
       loading.hidden = true;
     }
   });

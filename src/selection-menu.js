@@ -147,11 +147,11 @@
       toast.style.top = "80px";
     }
     toast.classList.add("is-visible");
-    if (showToast._timer) clearTimeout(showToast._timer);
-    showToast._timer = setTimeout(
-      () => toast.classList.remove("is-visible"),
-      1600
-    );
+    if (toast._bswHideTimer) clearTimeout(toast._bswHideTimer);
+    toast._bswHideTimer = setTimeout(() => {
+      toast._bswHideTimer = null;
+      toast.classList.remove("is-visible");
+    }, 1600);
   }
 
   // Material Symbols (filled / solid weight) — currentColor + 16px.
@@ -282,6 +282,10 @@
   }
 
   function hideMenu() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = 0;
+    }
     if (!menuEl || menuEl.hidden) return;
     menuEl.hidden = true;
     if (askSubEl) askSubEl.hidden = true;
@@ -418,8 +422,12 @@
       ta.style.opacity = "0";
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand("copy"); finish(); }
-      catch (_) { showToast("Copy failed"); hideMenu(); }
+      try {
+        const ok = document.execCommand("copy");
+        if (ok) finish();
+        else { hideMenu(); showToast("Copy failed"); }
+      }
+      catch (_) { hideMenu(); showToast("Copy failed"); }
       finally { try { document.body.removeChild(ta); } catch (_) {} }
     }
   }
@@ -454,9 +462,16 @@
     });
 
     const reveal = () => {
-      try { window.open(bot.url, "_blank", "noopener,noreferrer"); }
-      catch (_) {}
-      showToast("Sent to " + bot.label);
+      let win = null;
+      try {
+        win = window.open(bot.url, "_blank");
+        if (win) win.opener = null;
+      } catch (_) {}
+      if (!win) {
+        showToast("Popup blocked — copied to clipboard");
+      } else {
+        showToast("Sent to " + bot.label);
+      }
       hideMenu();
     };
 
@@ -529,19 +544,30 @@
   // Hide on outside mousedown / Esc / scroll. selectionchange already
   // closes when the selection collapses, but mousedown gives instant
   // feedback during drag-to-reselect.
-  document.addEventListener("selectionchange", onSelectionChange);
+  document.addEventListener("selectionchange", () => {
+    if (!mounted.length) return;
+    onSelectionChange();
+  });
   document.addEventListener("mousedown", (e) => {
+    if (!mounted.length) return;
     if (!menuEl || menuEl.hidden) return;
     if (menuEl.contains(e.target)) return;
     hideMenu();
   }, true);
   document.addEventListener("keydown", (e) => {
+    if (!mounted.length) return;
     if (e.key === "Escape") hideMenu();
   });
   // Capture-phase scroll listener catches both window and nested
   // overflow:auto containers (Obsidian wraps the article in several).
-  window.addEventListener("scroll", () => hideMenu(), true);
-  window.addEventListener("resize", () => hideMenu());
+  window.addEventListener("scroll", () => {
+    if (!mounted.length) return;
+    hideMenu();
+  }, true);
+  window.addEventListener("resize", () => {
+    if (!mounted.length) return;
+    hideMenu();
+  });
 
   function mount(rootEl, opts) {
     if (!rootEl) return;
