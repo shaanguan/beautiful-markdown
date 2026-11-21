@@ -79,6 +79,7 @@
         "styles/theme.css",
         "styles/extension.css",
         "styles/typography.css",
+        "styles/vibe-preset.css",
         "styles/claude-preset.css"
       ],
       "run_at": "document_end",
