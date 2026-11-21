@@ -605,13 +605,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "fetchUrl") {
     let parsedUrl = null;
     try { parsedUrl = new URL(String(msg.url || "")); } catch (_) {}
-    if (!parsedUrl || (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:")) {
+    const isHttp = parsedUrl && (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:");
+    let isAllowedLocalMd = false;
+    if (parsedUrl && parsedUrl.protocol === "file:") {
+      const senderUrl = (sender && sender.url) || "";
+      const trustedLocalSender = isExtensionSender(sender) ||
+        /^file:\/\/.*\.(md|markdown|mdown|mkd)(?:$|\?|#)/i.test(senderUrl);
+      if (trustedLocalSender) {
+        const rawUrl = String(msg.url || "");
+        let decodedRaw = rawUrl;
+        let decodedPath = "";
+        try { decodedRaw = decodeURIComponent(rawUrl); } catch (_) {}
+        try { decodedPath = decodeURIComponent(parsedUrl.pathname || ""); } catch (_) {}
+        isAllowedLocalMd = Boolean(
+          decodedPath &&
+          !rawUrl.includes("..") &&
+          !decodedRaw.includes("..") &&
+          !decodedPath.includes("..") &&
+          !/[\u0000-\u001f]/.test(decodedPath) &&
+          /\.(md|markdown|mdown|mkd)$/i.test(decodedPath)
+        );
+      }
+    }
+    if (!parsedUrl || (!isHttp && !isAllowedLocalMd)) {
       sendResponse({ ok: false, error: "disallowed URL scheme" });
       return;
     }
     fetch(parsedUrl.href)
       .then(function (res) {
-        if (!res.ok) throw new Error("HTTP " + res.status);
+        if (!res.ok && !(parsedUrl.protocol === "file:" && res.status === 0)) {
+          throw new Error("HTTP " + res.status);
+        }
         return res.text();
       })
       .then(function (text) { sendResponse({ ok: true, text: text }); })

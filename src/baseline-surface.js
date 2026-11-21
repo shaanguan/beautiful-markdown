@@ -535,7 +535,7 @@
         excludeAcceptAllOption: false
       });
     } catch (e) {
-      if (e && (e.name === "AbortError" || e.code === 20)) return null;
+      if (e && (e.name === "AbortError" || e.code === 20)) return { cancelled: true };
       console.warn("[Baseline] showOpenFilePicker failed:", e);
       return null;
     }
@@ -1858,7 +1858,8 @@
     async function pickFor(side) {
       if (!confirmDiscardIfDirty(side)) return false;
       const picked = await pickFileViaApi();
-      if (picked) {
+      if (picked && picked.cancelled) return false;
+      if (picked && typeof picked.text === "string") {
         if (picked.handle) {
           recordRecentHandle(picked.handle, picked.name).catch(() => {});
         }
@@ -1867,12 +1868,25 @@
           { fromLocalFile: true, fileHandle: picked.handle });
         return true;
       }
-      // showOpenFilePicker missing → fall back to file input.
-      if (typeof window.showOpenFilePicker !== "function") {
-        (side === "right" ? rightInput : leftInput).click();
-        return true;
+      // showOpenFilePicker unavailable or rejected (e.g. non-secure file:// context)
+      // → fall back to hidden file input.
+      (side === "right" ? rightInput : leftInput).click();
+      return true;
+    }
+
+    function isSameDocUrl(parsedTarget, pageHref) {
+      try {
+        const cur = new URL(pageHref);
+        if (parsedTarget.protocol !== cur.protocol) return false;
+        if (parsedTarget.protocol === "file:") {
+          return parsedTarget.pathname === cur.pathname && parsedTarget.search === cur.search;
+        }
+        return parsedTarget.origin === cur.origin &&
+          parsedTarget.pathname === cur.pathname &&
+          parsedTarget.search === cur.search;
+      } catch (_) {
+        return false;
       }
-      return false;
     }
 
     async function openRecentEntry(entry, side) {
@@ -1881,13 +1895,14 @@
         try { parsedUrl = new URL(entry.url); } catch (_) { return; }
         if (!["http:", "https:", "file:"].includes(parsedUrl.protocol)) return;
         const target = side === "right" ? "right" : "left";
+        const isLocal = parsedUrl.protocol === "file:";
         if (splitOn || side === "right") {
           if (!confirmDiscardIfDirty(target)) return;
           try {
             let text = null;
             try {
               const res = await fetch(entry.url);
-              if (res.ok) text = await res.text();
+              if (res.ok || (isLocal && res.status === 0)) text = await res.text();
             } catch (_) { /* fetch blocked (file:// same-origin) */ }
             if (text == null) {
               try {
@@ -1896,14 +1911,29 @@
                 if (resp && resp.ok) text = resp.text;
               } catch (_) { /* bg fetch also failed */ }
             }
+            // Opening the same document currently loaded in the main column
+            // in split view: reuse in-memory leftMarkdown if fetch failed
+            // (e.g. file:// access not yet enabled or offline).
+            if (text == null && isSameDocUrl(parsedUrl, location.href) && leftMarkdown) {
+              text = leftMarkdown;
+            }
             if (text != null) {
               recordRecentUrlBump(entry).catch(() => {});
-              const isLocal = /^file:/i.test(entry.url);
               await replaceColumn(target, text, entry.name || "",
                 { fromLocalFile: isLocal });
               return;
             }
-          } catch (_) { /* all attempts failed — fall through to navigate */ }
+          } catch (_) { /* handled below */ }
+          // Never clobber the whole tab with location.href when opening into
+          // the right split pane.
+          if (target === "right") {
+            window.alert(
+              isLocal
+                ? "无法在分栏中直接读取该本地文件。\n请确认已在扩展详情页开启「允许访问文件网址」，或点击「Open Markdown file」手动选择。"
+                : "无法在分栏中读取该文档，请稍后重试。"
+            );
+            return;
+          }
         }
         recordRecentUrlBump(entry).catch(() => {});
         location.href = entry.url;
@@ -1913,11 +1943,17 @@
       if (!confirmDiscardIfDirty(target)) return;
       const loaded = await readRecentDoc(entry);
       if (!loaded) {
+        // FileSystemFileHandle entries live in the extension origin's IndexedDB
+        // and cannot be read directly from file:// / http(s):// content scripts.
+        if (entry.kind === "handle" && location.protocol !== "chrome-extension:") {
+          await pickFor(target);
+          return;
+        }
         if (window.confirm("文件无法访问，可能已被移动或删除。\n从最近列表中移除？")) {
           removeRecentDoc(entry.id).catch(() => {});
-          const view = mountEl && mountEl.closest(".view-content");
+          const view = (target === "right" ? splitView : (mountEl && mountEl.closest(".view-content")));
           const slot = view && view.querySelector(".bsw-recent-slot");
-          if (slot) refreshUnifiedList(slot, side);
+          if (slot) refreshUnifiedList(slot, side, target === "right" ? { narrow: true } : undefined);
         }
         return;
       }
