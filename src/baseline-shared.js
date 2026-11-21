@@ -952,7 +952,7 @@
         continue;
       }
       // Skip if this mode already baked successfully (bump when params change).
-      const modeKey = (dark ? "dark" : "light") + ":v8-bright";
+      const modeKey = (dark ? "dark" : "light") + ":v9-seamless";
       if (layer.dataset.bswPaperMode === modeKey && layer.dataset.bswPaperReady === "1") {
         continue;
       }

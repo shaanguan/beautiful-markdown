@@ -93,33 +93,50 @@
     });
   }
 
+  /**
+   * Mirror the baked texture vertically onto a 2x-height 2D canvas so
+   * `background-repeat: repeat-y` is completely seamless on long documents
+   * (bottom meets bottom, top meets top), then encode synchronously as a
+   * compact WebP data URL (works reliably on file://, chrome-extension://,
+   * and http(s):// without blob:null origin issues).
+   */
   function canvasToTextureUrl(canvas) {
-    return new Promise((resolve, reject) => {
-      const fallbackToDataUrl = () => {
-        try {
-          const dataUrl = canvas.toDataURL("image/png");
-          if (!dataUrl || dataUrl.length < 100) {
-            reject(new Error("empty paper texture data URL"));
-            return;
-          }
-          resolve(dataUrl);
-        } catch (err) {
-          reject(err);
+    let target = canvas;
+    try {
+      const tw = Math.min(canvas.width, 1280);
+      const th = Math.round((canvas.height / Math.max(canvas.width, 1)) * tw);
+      if (tw >= 2 && th >= 2) {
+        const tiled = document.createElement("canvas");
+        tiled.width = tw;
+        tiled.height = th * 2;
+        const ctx = tiled.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(canvas, 0, 0, tw, th);
+          ctx.save();
+          ctx.translate(0, th * 2);
+          ctx.scale(1, -1);
+          ctx.drawImage(canvas, 0, 0, tw, th);
+          ctx.restore();
+          target = tiled;
         }
-      };
-
-      if (typeof canvas.toBlob === "function") {
-        canvas.toBlob((blob) => {
-          if (blob && blob.size > 0) {
-            resolve(URL.createObjectURL(blob));
-            return;
-          }
-          fallbackToDataUrl();
-        }, "image/webp", 0.85);
-      } else {
-        fallbackToDataUrl();
       }
-    });
+    } catch (_) {
+      target = canvas;
+    }
+
+    let dataUrl = "";
+    try {
+      dataUrl = target.toDataURL("image/webp", 0.85);
+    } catch (_) {
+      dataUrl = "";
+    }
+    if (!dataUrl || !dataUrl.startsWith("data:image/webp") || dataUrl.length < 100) {
+      dataUrl = target.toDataURL("image/png");
+    }
+    if (!dataUrl || dataUrl.length < 100) {
+      throw new Error("empty paper texture data URL");
+    }
+    return dataUrl;
   }
 
   /**
@@ -160,7 +177,7 @@
   }
 
   /**
-   * Bake PaperTexture to a tileable WebP object URL (falling back to PNG data URL).
+   * Bake PaperTexture to a seamless vertically-tileable WebP data URL.
    * @param {number} cssW
    * @param {number} cssH
    * @param {boolean} dark
@@ -170,11 +187,12 @@
     const P = api();
     if (!P) throw new Error("PaperShaders missing");
 
-    // Fixed tileable square (1280×1280) repeated vertically via CSS so cache
-    // keys stay stable across document heights and fibers never stretch.
-    const w = 1280;
-    const h = 1280;
-    const key = (dark ? "d" : "l") + ":" + w + "x" + h + ":v8-bright";
+    // Fixed square (1024×1024) mirrored to 1024×2048 so cache keys stay
+    // stable across document heights, fibers never stretch, and repeat-y
+    // has no visible horizontal seam.
+    const w = 1024;
+    const h = 1024;
+    const key = (dark ? "d" : "l") + ":" + w + "x" + h + ":v9-seamless";
     if (cache.has(key)) return cache.get(key);
 
     // Standalone texture (no flowers.webp filter) — same uniforms as the React demo.
@@ -213,7 +231,7 @@
       mount.parentHeight = h;
       mount.devicePixelsSupported = false;
       if (typeof mount.setMinPixelRatio === "function") {
-        mount.setMinPixelRatio(1.5);
+        mount.setMinPixelRatio(1.25);
       } else if (typeof mount.handleResize === "function") {
         mount.handleResize();
       }
@@ -224,15 +242,11 @@
       if (!canvas || canvas.width < 2 || canvas.height < 2) {
         throw new Error("PaperTexture canvas has no size (" + (canvas && canvas.width) + "x" + (canvas && canvas.height) + ")");
       }
-      const url = await canvasToTextureUrl(canvas);
+      const url = canvasToTextureUrl(canvas);
 
       if (cache.size > 4) {
         const firstKey = cache.keys().next().value;
-        const evicted = cache.get(firstKey);
         cache.delete(firstKey);
-        if (typeof evicted === "string" && evicted.startsWith("blob:")) {
-          try { URL.revokeObjectURL(evicted); } catch (_) { /* ignore */ }
-        }
       }
       cache.set(key, url);
       return url;
