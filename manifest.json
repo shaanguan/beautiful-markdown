@@ -80,7 +80,8 @@
         "styles/extension.css",
         "styles/typography.css",
         "styles/vibe-preset.css",
-        "styles/claude-preset.css"
+        "styles/claude-preset.css",
+        "styles/presets-polish.css"
       ],
       "run_at": "document_end",
       "all_frames": false

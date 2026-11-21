@@ -259,11 +259,11 @@ html:not([data-bsw-preset]) .app-container .markdown-preview-view.markdown-rende
   color: var(--text-normal, #191a1b) !important;
 }
 
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered p {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered p {
   margin-block: 0 !important;
 }
 
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered p + p {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered p + p {
   margin-top: var(--bsw-typography-paragraph-spacing) !important;
 }
 
@@ -388,7 +388,7 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
 /* Paragraph spacing belongs between document blocks, not inside a quote.
  * theme.css already supplies the quote's own padding; keeping p margins here
  * would double the vertical whitespace and make one-line quotes look huge. */
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered blockquote > p {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered blockquote > p {
   margin-block: 0 !important;
 }
 
@@ -589,6 +589,9 @@ html .app-container .markdown-preview-view.markdown-rendered blockquote > p {
   font-size: var(--bsw-typography-font-size) !important;
   line-height: var(--bsw-typography-line-height) !important;
 }
+html .app-container .markdown-preview-view.markdown-rendered blockquote > p + p {
+  margin-top: 0.85em !important;
+}
 html .app-container .markdown-preview-view.markdown-rendered pre {
   margin-block: var(--bsw-typography-code-block-margin) !important;
   padding: var(--bsw-typography-code-block-padding) !important;
@@ -607,6 +610,16 @@ html .app-container .markdown-preview-view.markdown-rendered table :is(th,td) {
   padding: 0.5em 0.65em !important;
   overflow-wrap: normal !important;
   word-break: normal !important;
+}
+/* Respect GFM column alignment attributes overridden by theme.css cell defaults. */
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td)[align="left"] {
+  text-align: left !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td)[align="center"] {
+  text-align: center !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td)[align="right"] {
+  text-align: right !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
   margin-block: var(--bsw-typography-table-margin) !important;

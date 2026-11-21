@@ -1,0 +1,911 @@
+/* Minimal, Stone & Paper preset typography polish
+ *
+ * Brings the remaining bundled presets up to the same craft standard as
+ * vibe-preset.css and claude-preset.css while preserving each theme's
+ * unmistakable identity:
+ *
+ *   Minimal → Swiss technical precision: flat weight-driven headings,
+ *             bare hairline code, crisp compact framed tables, steel-slate links
+ *   Stone   → GNOME Adwaita craftsmanship: structured 6-hue rainbow headings,
+ *             Adwaita blue accents, cool slate highlights, framed stone cards
+ *   Paper   → Archival serif book: Songti/Georgia prose, antique-bronze links,
+ *             warm ivory code/table panels, sepia archival syntax palette
+ *
+ * Contract:
+ *   - Every rule is scoped to its own [data-bsw-preset="..."] and guarded with
+ *     :not(:has(.bsw-open-empty)) so the empty homepage & empty split panes stay
+ *     completely untouched.
+ *   - Column width, base font size (16px), body line-height and block vertical
+ *     rhythm stay owned by typography.css and forceTypographyLock.
+ */
+
+/* ==========================================================================
+ * 1. MINIMAL — Swiss technical precision & density
+ * ========================================================================== */
+
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-min-ink: var(--text-normal, #0f0f0f);
+  --bsw-min-hairline: color-mix(in srgb, var(--bsw-min-ink) 12%, transparent);
+  --bsw-min-hairline-strong: color-mix(in srgb, var(--bsw-min-ink) 22%, transparent);
+  --bsw-min-wash: color-mix(in srgb, var(--bsw-min-ink) 3.5%, transparent);
+  --bsw-min-accent: #2f628c;
+  --bsw-min-accent-hover: #1f486b;
+  --bsw-min-highlight: rgba(229, 181, 103, 0.38);
+  --bsw-min-font-sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
+    "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --bsw-min-font-mono: var(--font-monospace, var(--font-monospace-theme,
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace));
+
+  --bsw-theme-marker-color: color-mix(in srgb, var(--bsw-min-ink) 42%, transparent);
+  --bsw-quote-rule-color: color-mix(in srgb, var(--bsw-min-ink) 26%, transparent);
+  --bsw-theme-quote-text: color-mix(in srgb, var(--bsw-min-ink) 70%, transparent);
+  --bsw-theme-table-head-line: var(--bsw-min-hairline-strong);
+  --bsw-theme-table-row-line: var(--bsw-min-hairline);
+  --bsw-theme-rule-color: var(--bsw-min-hairline-strong);
+
+  font-family: var(--bsw-min-font-sans) !important;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-spacing-trim: trim-start;
+  text-autospace: normal;
+  hanging-punctuation: allow-end;
+}
+
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-min-hairline: color-mix(in srgb, var(--bsw-min-ink) 13%, transparent);
+  --bsw-min-hairline-strong: color-mix(in srgb, var(--bsw-min-ink) 24%, transparent);
+  --bsw-min-wash: color-mix(in srgb, var(--bsw-min-ink) 5%, transparent);
+  --bsw-min-accent: #7eb4de;
+  --bsw-min-accent-hover: #a5cef0;
+  --bsw-min-highlight: rgba(229, 181, 103, 0.28);
+}
+
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(p, li, blockquote, td) {
+  text-wrap: pretty;
+}
+
+/* Swiss weight-driven headings: flat scale preserved, micro-tracking & small-caps
+ * H5/H6 labels honoring minimal.json's declared typography intent. */
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--bsw-min-font-sans) !important;
+  color: var(--bsw-min-ink) !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > :is(h1, h2):first-child {
+  margin-top: 0.25em !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > .bsw-fm-container + :is(h1, h2) {
+  margin-top: 0.75em !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h1 {
+  letter-spacing: -0.018em !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h2 {
+  letter-spacing: -0.012em !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h4 {
+  color: color-mix(in srgb, var(--bsw-min-ink) 88%, transparent) !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h5 {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.05em !important;
+  color: color-mix(in srgb, var(--bsw-min-ink) 78%, transparent) !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h6 {
+  font-variant-caps: small-caps;
+  letter-spacing: 0.06em !important;
+  color: color-mix(in srgb, var(--bsw-min-ink) 64%, transparent) !important;
+}
+
+/* Minimal links, wikilinks & outlined pill tags. */
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link) {
+  color: var(--bsw-min-accent) !important;
+  text-decoration: underline !important;
+  text-decoration-thickness: 1px !important;
+  text-underline-offset: 0.25em !important;
+  text-decoration-color: color-mix(in srgb, var(--bsw-min-accent) 36%, transparent) !important;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link):hover {
+  color: var(--bsw-min-accent-hover) !important;
+  text-decoration-color: currentColor !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link {
+  color: var(--bsw-min-accent) !important;
+  text-decoration: none !important;
+  border-bottom: 1px dashed color-mix(in srgb, var(--bsw-min-accent) 46%, transparent) !important;
+  padding-bottom: 0.03em;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link:hover {
+  color: var(--bsw-min-accent-hover) !important;
+  border-bottom-style: solid !important;
+  border-bottom-color: currentColor !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag {
+  background: transparent !important;
+  color: var(--bsw-min-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--bsw-min-accent) 34%, transparent) !important;
+  border-radius: 16px;
+  padding: 0.03em 0.52em;
+  font-size: 0.82em;
+  font-weight: 500;
+  line-height: 1.5;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag:hover {
+  background: color-mix(in srgb, var(--bsw-min-accent) 10%, transparent) !important;
+}
+
+/* Inline marks, del, kbd & inline code. */
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) mark {
+  background: var(--bsw-min-highlight) !important;
+  color: var(--bsw-min-ink) !important;
+  padding: 0.04em 0.18em !important;
+  border-radius: 2px !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) del {
+  color: color-mix(in srgb, var(--bsw-min-ink) 50%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--bsw-min-ink) 42%, transparent);
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) kbd {
+  font-family: var(--bsw-min-font-mono);
+  font-size: 0.8em;
+  line-height: 1.2;
+  margin-inline: 0.12em;
+  padding: 0.12em 0.38em;
+  border-radius: 3px;
+  border: 1px solid var(--bsw-min-hairline-strong);
+  border-bottom-width: 2px;
+  background: var(--bsw-min-wash);
+  color: var(--bsw-min-ink);
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :not(pre) > code {
+  font-family: var(--bsw-min-font-mono) !important;
+  background: color-mix(in srgb, var(--bsw-min-ink) 3.5%, transparent) !important;
+  border: 1px solid var(--bsw-min-hairline) !important;
+  border-radius: 3px !important;
+  padding: 0.1em 0.34em !important;
+  color: var(--bsw-min-ink) !important;
+  font-variant-ligatures: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a > code {
+  color: inherit !important;
+}
+
+/* Bare-surface hairline code blocks + restrained Swiss WCAG AA+ syntax palette. */
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) {
+  background: transparent !important;
+  border: 1px solid var(--bsw-min-hairline-strong) !important;
+  border-radius: 4px !important;
+  font-family: var(--bsw-min-font-mono) !important;
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) > code {
+  font-family: var(--bsw-min-font-mono) !important;
+  font-size: 0.875em !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+html[data-bsw-preset="minimal"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #1f2328 !important;
+}
+html[data-bsw-preset="minimal"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) { color: #a62b40 !important; }
+html[data-bsw-preset="minimal"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) { color: #2b5b84 !important; }
+html[data-bsw-preset="minimal"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) { color: #5b4886 !important; }
+html[data-bsw-preset="minimal"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) { color: #2f6b47 !important; }
+html[data-bsw-preset="minimal"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-symbol, .hljs-bullet, .hljs-meta
+) { color: #8c521c !important; }
+html[data-bsw-preset="minimal"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) { color: #6e737a !important; font-style: italic; }
+
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #d8dadc !important;
+}
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) { color: #e28390 !important; }
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) { color: #80b5db !important; }
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) { color: #b8a3df !important; }
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) { color: #95c48e !important; }
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-symbol, .hljs-bullet, .hljs-meta
+) { color: #deb178 !important; }
+html[data-bsw-preset="minimal"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) { color: #8c9096 !important; font-style: italic; }
+
+/* Crisp framed compact data table (clears theme.css inverted zebra fill). */
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .bsw-table-wrap {
+  border: 1px solid var(--bsw-min-hairline-strong) !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table {
+  font-variant-numeric: tabular-nums lining-nums;
+  background: transparent !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table :is(thead, tbody, tr) {
+  background: transparent !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table :is(th, td) {
+  padding: 0.38em 0.6em !important;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > thead > tr > th {
+  background: var(--bsw-min-wash) !important;
+  color: var(--bsw-min-ink) !important;
+  border-bottom: 1px solid var(--bsw-min-hairline-strong) !important;
+  vertical-align: bottom;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr > td {
+  background: transparent !important;
+  vertical-align: top;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr:hover > td {
+  background: var(--bsw-min-wash) !important;
+}
+
+/* Nested bullets & task checkbox harmony. */
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul > li:not(.task-list-item)::before {
+  background: transparent;
+  border: 1.4px solid var(--bsw-theme-marker-color);
+  box-sizing: border-box;
+  width: 0.4em;
+  height: 0.4em;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+  border: 0;
+  border-radius: 1px;
+  width: 0.3em;
+  height: 0.3em;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .task-list-item.is-checked input[type="checkbox"] {
+  background-color: var(--bsw-min-accent);
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) img:not(.emoji):not([width="16"]):not([height="16"]) {
+  border-radius: 4px;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+}
+html[data-bsw-preset="minimal"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ::selection {
+  background: color-mix(in srgb, var(--bsw-min-accent) 22%, transparent);
+}
+
+
+/* ==========================================================================
+ * 2. STONE (stone-gnome) — GNOME Adwaita craft + rainbow heading ladder
+ * ========================================================================== */
+
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-stone-ink: var(--text-normal, #2e2e33);
+  --bsw-stone-accent: #1c71d8;
+  --bsw-stone-accent-hover: #1a5fb4;
+  --bsw-stone-hairline: color-mix(in srgb, var(--bsw-stone-ink) 12%, transparent);
+  --bsw-stone-hairline-strong: color-mix(in srgb, var(--bsw-stone-ink) 20%, transparent);
+  --bsw-stone-surface: #f6f5f4;
+  --bsw-stone-wash: color-mix(in srgb, var(--bsw-stone-ink) 3.5%, transparent);
+  --bsw-stone-font-sans: "Adwaita Sans", "Inter", -apple-system, BlinkMacSystemFont,
+    "SF Pro Text", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --bsw-stone-font-mono: "Adwaita Mono", ui-monospace, "SF Mono", "JetBrains Mono",
+    Menlo, Consolas, monospace;
+
+  /* Structured heading scale (replaces :root's tiny 18px H1 fallback). */
+  --bsw-typography-h1-size: 2.125rem;
+  --bsw-typography-h2-size: 1.5rem;
+  --bsw-typography-h3-size: 1.25rem;
+  --bsw-typography-h4-size: 1.0625rem;
+  --bsw-typography-h5-h6-size: 0.9375rem;
+  --bsw-typography-h6-size: 0.875rem;
+  --bsw-typography-h1-weight: 700;
+  --bsw-typography-h2-weight: 600;
+  --bsw-typography-h3-weight: 600;
+  --bsw-typography-h4-weight: 600;
+  --bsw-typography-h5-weight: 600;
+  --bsw-typography-h6-weight: 600;
+  --bsw-typography-h1-line-height: 1.25;
+  --bsw-typography-h2-line-height: 1.32;
+  --bsw-typography-h3-line-height: 1.38;
+  --bsw-typography-h4-line-height: 1.45;
+  --bsw-typography-h5-line-height: 1.5;
+  --bsw-typography-h6-line-height: 1.5;
+
+  /* Deepen H3 amber-gold on light canvas so yellow keeps >= 5:1 legibility. */
+  --bsw-stone-h3-color: color-mix(in srgb, #b87c00 78%, var(--text-normal));
+
+  --bsw-theme-component-radius: 8px;
+  --bsw-theme-code-surface: var(--bsw-stone-surface);
+  --bsw-theme-quote-rule-width: 3px;
+  --bsw-quote-rule-color: color-mix(in srgb, #3584e4 72%, transparent);
+  --bsw-theme-quote-text: color-mix(in srgb, var(--bsw-stone-ink) 78%, transparent);
+  --bsw-theme-marker-color: color-mix(in srgb, var(--bsw-stone-ink) 44%, transparent);
+  --bsw-theme-table-head-line: var(--bsw-stone-hairline-strong);
+  --bsw-theme-table-row-line: var(--bsw-stone-hairline);
+  --bsw-theme-rule-color: var(--bsw-stone-hairline-strong);
+
+  /* Override stone-gnome.json's Adwaita-only stack so non-GNOME OSes never fall back to serif. */
+  font-family: var(--bsw-stone-font-sans) !important;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-spacing-trim: trim-start;
+  text-autospace: normal;
+  hanging-punctuation: allow-end;
+}
+
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-stone-accent: #68a6ee;
+  --bsw-stone-accent-hover: #99c1f1;
+  --bsw-stone-hairline: color-mix(in srgb, var(--bsw-stone-ink) 12%, transparent);
+  --bsw-stone-hairline-strong: color-mix(in srgb, var(--bsw-stone-ink) 22%, transparent);
+  --bsw-stone-surface: #26262a;
+  --bsw-stone-wash: color-mix(in srgb, var(--bsw-stone-ink) 5%, transparent);
+  --bsw-stone-h3-color: color-mix(in srgb, rgb(var(--color-yellow-rgb)) 76%, var(--text-normal));
+  --bsw-quote-rule-color: color-mix(in srgb, #68a6ee 72%, transparent);
+}
+
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(p, li, blockquote, td) {
+  text-wrap: pretty;
+}
+
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--bsw-stone-font-sans) !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > :is(h1, h2):first-child {
+  margin-top: 0.25em !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > .bsw-fm-container + :is(h1, h2) {
+  margin-top: 0.75em !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h1 {
+  letter-spacing: -0.02em !important;
+  border-bottom-color: color-mix(in srgb, var(--bsw-stone-h1-color) 22%, transparent) !important;
+  padding-bottom: 0.28em;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h2 {
+  letter-spacing: -0.012em !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h6 {
+  letter-spacing: 0.03em !important;
+}
+
+/* Adwaita blue links, wikilinks, tags & cool slate highlight. */
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link) {
+  color: var(--bsw-stone-accent) !important;
+  text-decoration: underline !important;
+  text-decoration-thickness: 1px !important;
+  text-underline-offset: 0.26em !important;
+  text-decoration-color: color-mix(in srgb, var(--bsw-stone-accent) 36%, transparent) !important;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link):hover {
+  color: var(--bsw-stone-accent-hover) !important;
+  text-decoration-color: currentColor !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link {
+  color: var(--bsw-stone-accent) !important;
+  text-decoration: none !important;
+  border-bottom: 1px dashed color-mix(in srgb, var(--bsw-stone-accent) 48%, transparent) !important;
+  padding-bottom: 0.03em;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link:hover {
+  color: var(--bsw-stone-accent-hover) !important;
+  border-bottom-style: solid !important;
+  border-bottom-color: currentColor !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag {
+  background: color-mix(in srgb, var(--bsw-stone-accent) 11%, transparent) !important;
+  color: var(--bsw-stone-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--bsw-stone-accent) 20%, transparent);
+  border-radius: 16px;
+  padding: 0.04em 0.54em;
+  font-size: 0.84em;
+  font-weight: 500;
+  line-height: 1.5;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag:hover {
+  background: color-mix(in srgb, var(--bsw-stone-accent) 18%, transparent) !important;
+}
+
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) mark {
+  background: #d4e6fb !important;
+  color: #1c3556 !important;
+  padding: 0.04em 0.22em !important;
+  border-radius: 4px !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) mark {
+  background: #28456c !important;
+  color: #dceafa !important;
+  padding: 0.04em 0.22em !important;
+  border-radius: 4px !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) del {
+  color: color-mix(in srgb, var(--bsw-stone-ink) 52%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--bsw-stone-ink) 44%, transparent);
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) kbd {
+  font-family: var(--bsw-stone-font-mono);
+  font-size: 0.82em;
+  line-height: 1.2;
+  margin-inline: 0.12em;
+  padding: 0.14em 0.44em;
+  border-radius: 6px;
+  border: 1px solid var(--bsw-stone-hairline-strong);
+  border-bottom-width: 2px;
+  background: var(--bsw-stone-surface);
+  color: var(--bsw-stone-ink);
+}
+
+/* Inline code & Adwaita card code blocks + fixed high-contrast Adwaita syntax palette. */
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :not(pre) > code {
+  font-family: var(--bsw-stone-font-mono) !important;
+  background: var(--bsw-stone-surface) !important;
+  border: 1px solid var(--bsw-stone-hairline) !important;
+  border-radius: 5px !important;
+  padding: 0.12em 0.38em !important;
+  color: var(--bsw-stone-ink) !important;
+  font-variant-ligatures: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a > code {
+  color: inherit !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) {
+  background: var(--bsw-stone-surface) !important;
+  border: 1px solid var(--bsw-stone-hairline) !important;
+  border-radius: 8px !important;
+  font-family: var(--bsw-stone-font-mono) !important;
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) > code {
+  font-family: var(--bsw-stone-font-mono) !important;
+  font-size: 0.875em !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+/* Replaces stone-gnome.json's unreadable #82B84F (light) and #488B09 (dark) functions. */
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #2e2e33 !important;
+}
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) { color: #b51a2b !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) { color: #1a5fb4 !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) { color: #783391 !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) { color: #1e7348 !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-symbol, .hljs-bullet, .hljs-meta
+) { color: #b55200 !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) { color: #686870 !important; font-style: italic; }
+
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #ededf0 !important;
+}
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) { color: #f67280 !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) { color: #78b3f5 !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) { color: #c798ea !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) { color: #67d39b !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-symbol, .hljs-bullet, .hljs-meta
+) { color: #f5a663 !important; }
+html[data-bsw-preset="stone-gnome"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) { color: #919198 !important; font-style: italic; }
+
+/* Framed Adwaita stone table card. */
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .bsw-table-wrap {
+  border: 1px solid var(--bsw-stone-hairline-strong) !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > thead > tr > th {
+  background: var(--bsw-stone-surface) !important;
+  color: var(--bsw-stone-ink) !important;
+  border-bottom: 1px solid var(--bsw-stone-hairline-strong) !important;
+  vertical-align: bottom;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr > td {
+  background: transparent !important;
+  vertical-align: top;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr:hover > td {
+  background: var(--bsw-stone-wash) !important;
+}
+
+/* Adwaita blue blockquote wash, nested bullets & task checkboxes. */
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote {
+  background: color-mix(in srgb, var(--bsw-stone-accent) 4.5%, transparent) !important;
+  border-radius: 0 8px 8px 0 !important;
+  padding-block: 0.55em !important;
+  padding-right: 1em;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote::before {
+  top: 0 !important;
+  bottom: 0 !important;
+  border-radius: 3px 0 0 3px !important;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul > li:not(.task-list-item)::before {
+  background: transparent;
+  border: 1.4px solid var(--bsw-theme-marker-color);
+  box-sizing: border-box;
+  width: 0.4em;
+  height: 0.4em;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+  border: 0;
+  border-radius: 1.5px;
+  width: 0.3em;
+  height: 0.3em;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .task-list-item.is-checked input[type="checkbox"] {
+  background-color: var(--bsw-stone-accent);
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) img:not(.emoji):not([width="16"]):not([height="16"]) {
+  border-radius: 8px;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) p > img:only-child:not(.emoji):not([width="16"]):not([height="16"]) {
+  box-shadow: 0 0 0 1px var(--bsw-stone-hairline);
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+}
+html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ::selection {
+  background: color-mix(in srgb, var(--bsw-stone-accent) 22%, transparent);
+}
+
+
+/* ==========================================================================
+ * 3. PAPER — Archival serif book reading
+ * ========================================================================== */
+
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-paper-ink: var(--text-normal, #372f24);
+  --bsw-paper-accent: #755630;
+  --bsw-paper-accent-hover: #523b1e;
+  --bsw-paper-hairline: color-mix(in srgb, var(--bsw-paper-ink) 12%, transparent);
+  --bsw-paper-hairline-strong: color-mix(in srgb, var(--bsw-paper-ink) 24%, transparent);
+  --bsw-paper-wash: color-mix(in srgb, #8a6d46 7%, transparent);
+  --bsw-paper-highlight: rgba(224, 188, 110, 0.42);
+  --bsw-paper-font-serif: "Iowan Old Style", "Palatino Linotype", Georgia,
+    "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC",
+    "Noto Serif SC", "SimSun", serif;
+  --bsw-paper-font-mono: var(--font-monospace, var(--font-monospace-theme,
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace));
+
+  /* Gentle book heading scale with clear minor-level tonal stepping. */
+  --bsw-typography-h5-h6-size: 0.9375rem;
+  --bsw-typography-h6-size: 0.875rem;
+  --bsw-typography-h5-weight: 600;
+  --bsw-typography-h6-weight: 500;
+
+  --bsw-theme-quote-rule-width: 2.5px;
+  --bsw-quote-rule-color: color-mix(in srgb, #8a6d46 58%, transparent);
+  --bsw-theme-quote-text: color-mix(in srgb, var(--bsw-paper-ink) 80%, transparent);
+  --bsw-theme-marker-color: color-mix(in srgb, #8a6d46 68%, var(--bsw-paper-ink));
+  --bsw-theme-rule-color: color-mix(in srgb, #8a6d46 46%, transparent);
+
+  font-family: var(--bsw-paper-font-serif) !important;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-spacing-trim: trim-start;
+  text-autospace: normal;
+  hanging-punctuation: allow-end;
+}
+
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-paper-accent: #d6b78a;
+  --bsw-paper-accent-hover: #ebd0a8;
+  --bsw-paper-hairline: color-mix(in srgb, var(--bsw-paper-ink) 13%, transparent);
+  --bsw-paper-hairline-strong: color-mix(in srgb, var(--bsw-paper-ink) 25%, transparent);
+  --bsw-paper-wash: color-mix(in srgb, #c2a478 9%, transparent);
+  --bsw-paper-highlight: rgba(194, 164, 120, 0.30);
+  --bsw-quote-rule-color: color-mix(in srgb, #c2a478 58%, transparent);
+  --bsw-theme-marker-color: color-mix(in srgb, #c2a478 62%, var(--bsw-paper-ink));
+  --bsw-theme-rule-color: color-mix(in srgb, #c2a478 46%, transparent);
+}
+
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(p, li, blockquote, td) {
+  text-wrap: pretty;
+}
+
+/* Book serif headings. */
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--bsw-paper-font-serif) !important;
+  color: var(--bsw-paper-ink) !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > :is(h1, h2):first-child {
+  margin-top: 0.25em !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > .bsw-fm-container + :is(h1, h2) {
+  margin-top: 0.75em !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h1 {
+  letter-spacing: -0.012em !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h2 {
+  letter-spacing: -0.008em !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h5 {
+  color: color-mix(in srgb, var(--bsw-paper-ink) 84%, transparent) !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h6 {
+  color: color-mix(in srgb, var(--bsw-paper-ink) 66%, transparent) !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* Antique-bronze links, wikilinks & bookplate tags (eliminates #0000ee). */
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link) {
+  color: var(--bsw-paper-accent) !important;
+  text-decoration: underline !important;
+  text-decoration-thickness: 1px !important;
+  text-underline-offset: 0.28em !important;
+  text-decoration-color: color-mix(in srgb, var(--bsw-paper-accent) 42%, transparent) !important;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link):hover {
+  color: var(--bsw-paper-accent-hover) !important;
+  text-decoration-color: currentColor !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link {
+  color: var(--bsw-paper-accent) !important;
+  text-decoration: none !important;
+  border-bottom: 1px dashed color-mix(in srgb, var(--bsw-paper-accent) 52%, transparent) !important;
+  padding-bottom: 0.04em;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link:hover {
+  color: var(--bsw-paper-accent-hover) !important;
+  border-bottom-style: solid !important;
+  border-bottom-color: currentColor !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag {
+  background: color-mix(in srgb, var(--bsw-paper-accent) 11%, transparent) !important;
+  color: var(--bsw-paper-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--bsw-paper-accent) 22%, transparent);
+  padding: 0.04em 0.52em;
+  font-size: 0.84em;
+  line-height: 1.5;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag:hover {
+  background: color-mix(in srgb, var(--bsw-paper-accent) 18%, transparent) !important;
+}
+
+/* Parchment highlight, del, kbd & warm inline code. */
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) mark {
+  background: var(--bsw-paper-highlight) !important;
+  color: var(--bsw-paper-ink) !important;
+  padding: 0.04em 0.2em !important;
+  border-radius: 3px !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) del {
+  color: color-mix(in srgb, var(--bsw-paper-ink) 54%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--bsw-paper-ink) 44%, transparent);
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) kbd {
+  font-family: var(--bsw-paper-font-mono);
+  font-size: 0.8em;
+  line-height: 1.2;
+  margin-inline: 0.12em;
+  padding: 0.14em 0.42em;
+  border-radius: 5px;
+  border: 1px solid var(--bsw-theme-panel-edge, var(--bsw-paper-hairline-strong));
+  border-bottom-width: 2px;
+  background: var(--bsw-theme-panel-surface, #f3ead6);
+  color: var(--bsw-paper-ink);
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :not(pre) > code {
+  font-family: var(--bsw-paper-font-mono) !important;
+  padding: 0.11em 0.36em !important;
+  color: var(--code-normal, #7a4a2b) !important;
+  font-variant-ligatures: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a > code {
+  color: inherit !important;
+}
+
+/* Archival ink syntax palette on warm ivory (#F3EAD6) / lamp-lit dark (#2C2823). */
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) {
+  font-family: var(--bsw-paper-font-mono) !important;
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) > code {
+  font-family: var(--bsw-paper-font-mono) !important;
+  font-size: 0.875em !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+html[data-bsw-preset="paper"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #372f24 !important;
+}
+html[data-bsw-preset="paper"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) { color: #8f3427 !important; }
+html[data-bsw-preset="paper"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) { color: #2d517a !important; }
+html[data-bsw-preset="paper"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) { color: #6b4578 !important; }
+html[data-bsw-preset="paper"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) { color: #2d6448 !important; }
+html[data-bsw-preset="paper"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-symbol, .hljs-bullet, .hljs-meta
+) { color: #8c5619 !important; }
+html[data-bsw-preset="paper"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) { color: #786c5a !important; font-style: italic; }
+
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #e6dfd2 !important;
+}
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) { color: #e38b7d !important; }
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) { color: #8db4dc !important; }
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) { color: #c5a1d4 !important; }
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) { color: #89bf9e !important; }
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-symbol, .hljs-bullet, .hljs-meta
+) { color: #deb276 !important; }
+html[data-bsw-preset="paper"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) { color: #9c9282 !important; font-style: italic; }
+
+/* Literary blockquote, warm sepia table, book divider & nested bullets. */
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote {
+  letter-spacing: 0.012em;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote :is(code, pre) {
+  font-family: var(--bsw-paper-font-mono) !important;
+  letter-spacing: 0;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > thead > tr > th {
+  color: var(--bsw-paper-ink) !important;
+  border-bottom: 1.5px solid var(--bsw-theme-panel-edge, var(--bsw-paper-hairline-strong)) !important;
+  vertical-align: bottom;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr > td {
+  vertical-align: top;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr:hover > td {
+  background: var(--bsw-paper-wash) !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) hr {
+  width: 64px !important;
+  margin-inline: auto !important;
+  border-top-width: 2px !important;
+  border-top-color: var(--bsw-theme-rule-color) !important;
+  border-radius: 999px !important;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul > li:not(.task-list-item)::before {
+  background: transparent;
+  border: 1.4px solid var(--bsw-theme-marker-color);
+  box-sizing: border-box;
+  width: 0.4em;
+  height: 0.4em;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+  border: 0;
+  border-radius: 1.5px;
+  width: 0.3em;
+  height: 0.3em;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .task-list-item.is-checked input[type="checkbox"] {
+  background-color: var(--bsw-paper-accent);
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) img:not(.emoji):not([width="16"]):not([height="16"]) {
+  border-radius: 6px;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) p > img:only-child:not(.emoji):not([width="16"]):not([height="16"]) {
+  box-shadow: 0 0 0 1px var(--bsw-theme-panel-edge, var(--bsw-paper-hairline));
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+}
+html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ::selection {
+  background: color-mix(in srgb, var(--bsw-paper-accent) 24%, transparent);
+}
+
+/* ==========================================================================
+ * Print overrides across Minimal, Stone & Paper
+ * ========================================================================== */
+@media print {
+  html:is([data-bsw-preset="minimal"], [data-bsw-preset="stone-gnome"], [data-bsw-preset="paper"]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid),
+  html:is([data-bsw-preset="minimal"], [data-bsw-preset="stone-gnome"], [data-bsw-preset="paper"]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .bsw-table-wrap,
+  html[data-bsw-preset="stone-gnome"] body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote {
+    background: transparent !important;
+    border-color: #ccc !important;
+  }
+  html:is([data-bsw-preset="minimal"], [data-bsw-preset="stone-gnome"], [data-bsw-preset="paper"]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr:hover > td {
+    background: transparent !important;
+  }
+  html:is([data-bsw-preset="minimal"], [data-bsw-preset="stone-gnome"], [data-bsw-preset="paper"]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag) {
+    color: inherit !important;
+  }
+}
