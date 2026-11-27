@@ -1,0 +1,504 @@
+/* Vibe (default preset) — modern Chinese & bilingual editorial typography
+ *
+ * Vibe is the preset every user sees out of the box, so it owns a dedicated
+ * expression stylesheet alongside claude-preset.css.
+ *
+ * Scope:
+ *   html:not([data-bsw-preset]) — baseline-shared.js removes data-bsw-preset
+ *   when "default" (Vibe) is active, so named/custom presets are untouched.
+ *   :not(:has(.bsw-open-empty)) — keeps the empty homepage hero and empty
+ *   split-pane prompts completely isolated from document typography rules.
+ *
+ * Contract:
+ *   Expression & visual hierarchy only. Column width (40rem), base font size
+ *   (16px), body line-height (1.9), and block rhythm spacing remain owned by
+ *   typography.css and BaselineShared.forceTypographyLock.
+ */
+
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  /* Editorial ink palette derived from Vibe's warm neutral theme tokens so
+   * light (#fafafa / #191a1b) and dark (#1d1d1c / #f0efeb) stay cohesive. */
+  --bsw-vibe-ink: var(--text-normal, #191a1b);
+  --bsw-vibe-body: color-mix(in srgb, var(--bsw-vibe-ink) 86%, transparent);
+  --bsw-vibe-hairline: color-mix(in srgb, var(--bsw-vibe-ink) 10%, transparent);
+  --bsw-vibe-hairline-strong: color-mix(in srgb, var(--bsw-vibe-ink) 22%, transparent);
+  --bsw-vibe-wash: color-mix(in srgb, var(--bsw-vibe-ink) 3.5%, transparent);
+  --bsw-vibe-link: #2451b2;
+  --bsw-vibe-link-hover: #1a3d8f;
+  --bsw-vibe-highlight: rgba(255, 212, 82, 0.56);
+  --bsw-vibe-font-sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Text",
+    "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --bsw-vibe-font-quote: Georgia, "Iowan Old Style", "Kaiti SC", "STKaiti",
+    "KaiTi", "BiauKai", "FZKai-Z03", "Noto Serif CJK SC", "Noto Serif SC",
+    "Songti SC", serif;
+  --bsw-vibe-font-mono: var(--font-monospace, var(--font-monospace-theme,
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace));
+
+  /* Balanced editorial heading ladder (prevents H2 from visually outweighing H1). */
+  --bsw-typography-h1-size: 2.25rem;
+  --bsw-typography-h2-size: 1.5625rem;
+  --bsw-typography-h3-size: 1.25rem;
+  --bsw-typography-h4-size: 1.0625rem;
+  --bsw-typography-h5-h6-size: 0.9375rem;
+  --bsw-typography-h6-size: 0.875rem;
+  --bsw-typography-h1-weight: 600;
+  --bsw-typography-h2-weight: 600;
+  --bsw-typography-h3-weight: 600;
+  --bsw-typography-h4-weight: 600;
+  --bsw-typography-h5-weight: 600;
+  --bsw-typography-h6-weight: 500;
+  --bsw-typography-h1-line-height: 1.25;
+  --bsw-typography-h2-line-height: 1.32;
+  --bsw-typography-h3-line-height: 1.38;
+  --bsw-typography-h4-line-height: 1.45;
+  --bsw-typography-h5-line-height: 1.5;
+  --bsw-typography-h6-line-height: 1.5;
+
+  /* Shared component tokens consumed by typography.css. */
+  --bsw-theme-component-radius: 8px;
+  --bsw-theme-quote-rule-width: 2.5px;
+  --bsw-quote-rule-color: color-mix(in srgb, var(--bsw-vibe-ink) 30%, transparent);
+  --bsw-theme-quote-text: color-mix(in srgb, var(--bsw-vibe-ink) 76%, transparent);
+  --bsw-theme-marker-color: color-mix(in srgb, var(--bsw-vibe-ink) 42%, transparent);
+  --bsw-theme-table-head-line: var(--bsw-vibe-hairline-strong);
+  --bsw-theme-table-row-line: var(--bsw-vibe-hairline);
+  --bsw-theme-rule-color: color-mix(in srgb, var(--bsw-vibe-ink) 24%, transparent);
+  --bsw-theme-code-surface: #f3f3f0;
+
+  /* Base body expression: crisp Latin metrics paired with PingFang / Noto Sans SC. */
+  font-family: var(--bsw-vibe-font-sans) !important;
+  color: var(--bsw-vibe-body) !important;
+
+  /* Fine type rendering (each property degrades harmlessly where unsupported). */
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Chrome 123+ / 140+: trim leading fullwidth punctuation & CJK–Latin micro-gap. */
+  text-spacing-trim: trim-start;
+  text-autospace: normal;
+  hanging-punctuation: allow-end;
+}
+
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-vibe-hairline: color-mix(in srgb, var(--bsw-vibe-ink) 12%, transparent);
+  --bsw-vibe-hairline-strong: color-mix(in srgb, var(--bsw-vibe-ink) 24%, transparent);
+  --bsw-vibe-wash: color-mix(in srgb, var(--bsw-vibe-ink) 4.5%, transparent);
+  --bsw-vibe-link: #7ab3f0;
+  --bsw-vibe-link-hover: #a0caf7;
+  --bsw-vibe-highlight: rgba(245, 194, 72, 0.36);
+  --bsw-theme-code-surface: #252524;
+  --bsw-theme-rule-color: color-mix(in srgb, var(--bsw-vibe-ink) 28%, transparent);
+}
+
+/* ── Paragraphs & line wrapping ── */
+/* Avoid single-character CJK orphans on paragraph end lines (Chrome 117+). */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(p, li, blockquote, td) {
+  text-wrap: pretty;
+}
+
+/* ── Headings ── */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--bsw-vibe-font-sans) !important;
+  color: var(--bsw-vibe-ink) !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h1 {
+  letter-spacing: -0.02em !important;
+  font-feature-settings: "kern", "liga" !important;
+}
+/* Trim redundant top whitespace when a title opens the document. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > :is(h1, h2):first-child {
+  margin-top: 0.25em !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > .bsw-fm-container + :is(h1, h2) {
+  margin-top: 0.75em !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h2 {
+  letter-spacing: -0.012em !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h3 {
+  letter-spacing: -0.006em !important;
+}
+/* Tonal stepping on minor heading levels so they read as structured sub-labels
+ * rather than colliding visually with bold body prose. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h4 {
+  color: color-mix(in srgb, var(--bsw-vibe-ink) 92%, transparent) !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h5 {
+  color: color-mix(in srgb, var(--bsw-vibe-ink) 78%, transparent) !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h6 {
+  color: color-mix(in srgb, var(--bsw-vibe-ink) 64%, transparent) !important;
+  letter-spacing: 0.04em !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .bsw-heading-anchor {
+  color: color-mix(in srgb, var(--bsw-vibe-ink) 28%, transparent) !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .bsw-heading-anchor:hover {
+  color: var(--bsw-vibe-link) !important;
+}
+
+/* ── Inline emphasis, highlight, strikethrough & kbd ── */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(strong, b) {
+  font-family: var(--bsw-vibe-font-sans) !important;
+  font-weight: 600 !important;
+  color: var(--bsw-vibe-ink) !important;
+}
+/* Editorial ink-marker band under text rather than a flat solid box. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) mark {
+  background: linear-gradient(
+    to bottom,
+    transparent 58%,
+    var(--bsw-vibe-highlight) 58%,
+    var(--bsw-vibe-highlight) 93%,
+    transparent 93%
+  ) !important;
+  color: var(--bsw-vibe-ink) !important;
+  padding: 0 0.1em !important;
+  border-radius: 0 !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) del {
+  color: color-mix(in srgb, var(--bsw-vibe-ink) 52%, transparent);
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--bsw-vibe-ink) 42%, transparent);
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) kbd {
+  font-family: var(--bsw-vibe-font-mono);
+  font-size: 0.82em;
+  line-height: 1.2;
+  margin-inline: 0.12em;
+  padding: 0.14em 0.42em;
+  border-radius: 5px;
+  border: 1px solid var(--bsw-vibe-hairline-strong);
+  border-bottom-width: 2px;
+  background: var(--bsw-theme-code-surface);
+  color: var(--bsw-vibe-ink);
+}
+
+/* ── Links, wikilinks & tags ── */
+/* Fine underline resting cleanly below CJK glyphs; solidifies on hover. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link) {
+  color: var(--bsw-vibe-link) !important;
+  text-decoration-line: underline !important;
+  text-decoration-thickness: 1px !important;
+  text-underline-offset: 0.28em !important;
+  text-decoration-color: color-mix(in srgb, var(--bsw-vibe-link) 34%, transparent) !important;
+  transition: text-decoration-color 0.15s ease, color 0.15s ease;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link):hover {
+  color: var(--bsw-vibe-link-hover) !important;
+  text-decoration-color: currentColor !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link {
+  color: var(--bsw-vibe-link) !important;
+  text-decoration: none !important;
+  border-bottom: 1px dashed color-mix(in srgb, var(--bsw-vibe-link) 45%, transparent) !important;
+  padding-bottom: 0.04em;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.internal-link:hover {
+  color: var(--bsw-vibe-link-hover) !important;
+  border-bottom-style: solid !important;
+  border-bottom-color: currentColor !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag {
+  background: color-mix(in srgb, var(--bsw-vibe-link) 9%, transparent) !important;
+  color: var(--bsw-vibe-link) !important;
+  border: 1px solid color-mix(in srgb, var(--bsw-vibe-link) 16%, transparent);
+  padding: 0.04em 0.52em;
+  font-size: 0.84em;
+  font-weight: 500;
+  line-height: 1.5;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a.tag:hover {
+  background: color-mix(in srgb, var(--bsw-vibe-link) 15%, transparent) !important;
+  border-color: color-mix(in srgb, var(--bsw-vibe-link) 28%, transparent);
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .internal-embed {
+  background: var(--bsw-theme-code-surface);
+  border: 1px dashed var(--bsw-vibe-hairline-strong);
+  border-radius: 6px;
+  color: var(--bsw-theme-quote-text);
+}
+
+/* ── Inline code ── */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :not(pre) > code {
+  font-family: var(--bsw-vibe-font-mono) !important;
+  padding: 0.12em 0.38em !important;
+  border: 1px solid color-mix(in srgb, var(--bsw-vibe-ink) 8%, transparent) !important;
+  border-radius: 5px !important;
+  background: color-mix(in srgb, var(--bsw-vibe-ink) 5%, transparent) !important;
+  color: color-mix(in srgb, var(--bsw-vibe-ink) 90%, transparent) !important;
+  font-variant-ligatures: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a > code {
+  color: inherit !important;
+  border-color: color-mix(in srgb, currentColor 18%, transparent) !important;
+}
+
+/* ── Code blocks & editorial syntax palette ── */
+/* Warm paper-toned code surface + hairline edge; mermaid keeps its own frame. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) {
+  border: 1px solid var(--bsw-vibe-hairline) !important;
+  border-radius: var(--bsw-theme-component-radius) !important;
+  background: var(--bsw-theme-code-surface) !important;
+  font-family: var(--bsw-vibe-font-mono) !important;
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) > code {
+  font-family: var(--bsw-vibe-font-mono) !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  font-size: 0.875em !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre > .bsw-code-copy {
+  border-color: var(--bsw-vibe-hairline);
+  border-radius: 6px;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre > .bsw-code-copy.is-copied {
+  color: var(--bsw-vibe-link);
+  border-color: var(--bsw-vibe-link);
+}
+
+/* Curated ink syntax palette — WCAG AA+ contrast in both light and dark modes,
+ * replacing theme.css's dim #b6b9c5 comments and pale #62afef properties. */
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #26282c !important;
+}
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) {
+  color: #9c3424 !important;
+}
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) {
+  color: #20509e !important;
+}
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) {
+  color: #5c3f8f !important;
+}
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) {
+  color: #1d6b52 !important;
+}
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable,
+  .hljs-symbol, .hljs-bullet, .hljs-meta
+) {
+  color: #8f4f12 !important;
+}
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) {
+  color: #6e737c !important;
+  font-style: italic;
+}
+html:not([data-bsw-preset]) body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs-deletion {
+  color: #b3352b !important;
+}
+
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs {
+  color: #e4e3de !important;
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-keyword, .hljs-selector-tag, .hljs-name, .hljs-built_in, .hljs-type
+) {
+  color: #e88978 !important;
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-title, .hljs-section, .hljs-function
+) {
+  color: #85b8f0 !important;
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-attribute, .hljs-attr, .hljs-property
+) {
+  color: #bfa3ec !important;
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-string, .hljs-regexp, .hljs-addition
+) {
+  color: #7ec8a8 !important;
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable,
+  .hljs-symbol, .hljs-bullet, .hljs-meta
+) {
+  color: #e2b074 !important;
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(
+  .hljs-comment, .hljs-quote
+) {
+  color: #8c8e94 !important;
+  font-style: italic;
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .hljs-deletion {
+  color: #eb7d75 !important;
+}
+
+/* ── Signature Kaiti pull-quote ── */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote {
+  font-family: var(--bsw-vibe-font-quote) !important;
+  color: var(--bsw-theme-quote-text) !important;
+  font-style: normal !important;
+  letter-spacing: 0.015em !important;
+}
+/* Multi-paragraph quotes breathe naturally instead of collapsing together. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote > p + p {
+  margin-top: 0.85em !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote :is(strong, b) {
+  font-family: var(--bsw-vibe-font-quote) !important;
+  color: color-mix(in srgb, var(--bsw-vibe-ink) 92%, transparent) !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote :is(code, pre) {
+  font-family: var(--bsw-vibe-font-mono) !important;
+  letter-spacing: 0 !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) blockquote blockquote {
+  margin-block: 0.75em 0 !important;
+}
+
+/* ── Unified list markers & nested bullet hierarchy ── */
+/* extension.css draws unordered bullets with li::before; tint them to match
+ * ordered numerals and step nested bullets into hollow rings / fine squares. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul > li:not(.task-list-item)::before {
+  background: transparent;
+  border: 1.4px solid var(--bsw-theme-marker-color);
+  box-sizing: border-box;
+  width: 0.4em;
+  height: 0.4em;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+  border: 0;
+  border-radius: 1.5px;
+  width: 0.3em;
+  height: 0.3em;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ol > li::marker {
+  color: var(--bsw-theme-marker-color) !important;
+  font-weight: 500 !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .task-list-item.is-checked input[type="checkbox"] {
+  background-color: var(--bsw-vibe-link);
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .task-list-item.is-checked input[type="checkbox"]:hover {
+  background-color: var(--bsw-vibe-link-hover);
+}
+
+/* ── Editorial booktabs tables ── */
+/* Flush outer edges align with body prose; booktabs header & closing rules
+ * frame open tables cleanly without boxing them into cards. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table :is(th, td):first-child {
+  padding-left: 0 !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table :is(th, td):last-child {
+  padding-right: 0 !important;
+}
+/* Respect GFM column alignment attributes overridden by theme.css defaults. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table :is(th, td)[align="left"] {
+  text-align: left !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table :is(th, td)[align="center"] {
+  text-align: center !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table :is(th, td)[align="right"] {
+  text-align: right !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > thead > tr > th {
+  color: var(--bsw-vibe-ink) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  border-top: 1px solid var(--bsw-vibe-hairline) !important;
+  border-bottom: 1.5px solid var(--bsw-theme-table-head-line) !important;
+  vertical-align: bottom;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr > td {
+  vertical-align: top;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr:last-child > td {
+  border-bottom: 1px solid var(--bsw-theme-table-head-line) !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr:hover > td {
+  background: var(--bsw-vibe-wash) !important;
+}
+
+/* ── Signature short centered editorial divider ── */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) hr {
+  width: 64px !important;
+  margin-inline: auto !important;
+  border-top-width: 2px !important;
+  border-top-color: var(--bsw-theme-rule-color) !important;
+  border-radius: 999px !important;
+}
+
+/* ── Media, frontmatter, callouts & math ── */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) img:not(.emoji):not([width="16"]):not([height="16"]) {
+  border-radius: 6px;
+}
+/* Give standalone block images a whisper-thin outline so light screenshots
+ * stay separated from Vibe's off-white paper canvas. */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) p > img:only-child:not(.emoji):not([width="16"]):not([height="16"]) {
+  box-shadow: 0 0 0 1px var(--bsw-vibe-hairline);
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) figcaption {
+  color: var(--text-muted) !important;
+  font-size: 0.875em !important;
+  text-align: center;
+  margin-top: 0.5em;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .bsw-fm-container:not(.is-collapsed) {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--bsw-vibe-hairline);
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .callout {
+  border-radius: var(--bsw-theme-component-radius) !important;
+}
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+}
+
+/* ── Selection ── */
+html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ::selection {
+  background: color-mix(in srgb, var(--bsw-vibe-link) 20%, transparent);
+}
+html:not([data-bsw-preset]) body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ::selection {
+  background: color-mix(in srgb, var(--bsw-vibe-link) 28%, transparent);
+}
+
+/* ── Print ── */
+/* Keep printed output crisp and ink-frugal: no tinted panels or hover washes. */
+@media print {
+  html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) {
+    background: transparent !important;
+    border-color: #ccc !important;
+  }
+  html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table > tbody > tr:hover > td {
+    background: transparent !important;
+  }
+  html:not([data-bsw-preset]) body .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag) {
+    color: inherit !important;
+  }
+}

@@ -172,6 +172,9 @@
     syncHistoryButtons();
   }
 
+  let mirrorStyleSynced = false;
+  let cachedFontSize = 16;
+
   function syncMirrorStyle() {
     if (!mirror || !input) return;
     const s = getComputedStyle(input);
@@ -181,18 +184,36 @@
     mirror.style.letterSpacing = s.letterSpacing;
     mirror.style.padding = s.padding;
     mirror.style.tabSize = s.tabSize || "2";
+    cachedFontSize = parseFloat(s.fontSize) || 16;
+    if (caretOverlay) {
+      // Set font longhands explicitly. The `font` shorthand often fails to
+      // serialize for getComputedStyle output, silently dropping the family
+      // back to the body's sans-serif — which shifted the glyph half a
+      // line below the textarea's monospace baseline last time we tried.
+      caretOverlay.style.fontFamily = s.fontFamily;
+      caretOverlay.style.fontSize = s.fontSize;
+      caretOverlay.style.fontStyle = s.fontStyle;
+      caretOverlay.style.fontWeight = s.fontWeight;
+      caretOverlay.style.fontVariant = s.fontVariant;
+      caretOverlay.style.lineHeight = s.lineHeight;
+      caretOverlay.style.letterSpacing = s.letterSpacing;
+      caretOverlay.style.tabSize = s.tabSize;
+    }
+    mirrorStyleSynced = true;
   }
 
   function autoGrowTextarea() {
     if (!input) return;
+    const savedScrollTop = editScroller ? editScroller.scrollTop : 0;
     input.style.height = "auto";
     const next = Math.max(input.scrollHeight, input.clientHeight);
     input.style.height = next + "px";
+    if (editScroller) editScroller.scrollTop = savedScrollTop;
   }
 
   function measureOffsetTop(offset) {
     if (!mirror || !input) return 0;
-    syncMirrorStyle();
+    if (!mirrorStyleSynced) syncMirrorStyle();
     const safe = Math.max(0, Math.min(offset, input.value.length));
     mirror.textContent = input.value.slice(0, safe);
     return mirror.scrollHeight;
@@ -224,34 +245,27 @@
     // markerText: what we insert in the mirror to measure the caret's pixel
     //   position. nbsp keeps end-of-line / end-of-text measurable without
     //   triggering an extra wrap (nbsp doesn't break).
-    // afterText: rest of the mirror content (preserves line layout below).
-    let glyph, markerText, afterText;
+    let glyph, markerText;
     if (start >= text.length) {
       glyph = " ";
       markerText = " ";
-      afterText = "";
     } else if (ch === "\n" || ch === "\r") {
       glyph = " ";
       markerText = " ";
-      // Keep the newline so subsequent lines remain on their own rows.
-      afterText = text.slice(start);
     } else if (ch === "\t") {
       glyph = " ";
       markerText = " ";
-      afterText = text.slice(start + 1);
     } else {
       glyph = ch;
       markerText = ch;
-      afterText = text.slice(start + 1);
     }
 
-    syncMirrorStyle();
+    if (!mirrorStyleSynced) syncMirrorStyle();
     while (mirror.firstChild) mirror.removeChild(mirror.firstChild);
     mirror.appendChild(document.createTextNode(text.slice(0, start)));
     const marker = document.createElement("span");
     marker.textContent = markerText;
     mirror.appendChild(marker);
-    if (afterText) mirror.appendChild(document.createTextNode(afterText));
 
     const markerRect = marker.getBoundingClientRect();
     const mirrorRect = mirror.getBoundingClientRect();
@@ -267,33 +281,24 @@
     const top = markerRect.top - mainRect.top + dy;
     const left = markerRect.left - mainRect.left + dx;
 
-    const cs = getComputedStyle(input);
-    // Set font longhands explicitly. The `font` shorthand often fails to
-    // serialize for getComputedStyle output, silently dropping the family
-    // back to the body's sans-serif — which shifted the glyph half a
-    // line below the textarea's monospace baseline last time we tried.
-    caretOverlay.style.fontFamily = cs.fontFamily;
-    caretOverlay.style.fontSize = cs.fontSize;
-    caretOverlay.style.fontStyle = cs.fontStyle;
-    caretOverlay.style.fontWeight = cs.fontWeight;
-    caretOverlay.style.fontVariant = cs.fontVariant;
-    caretOverlay.style.lineHeight = cs.lineHeight;
-    caretOverlay.style.letterSpacing = cs.letterSpacing;
-    caretOverlay.style.tabSize = cs.tabSize;
-
     caretOverlay.style.top = top + "px";
     caretOverlay.style.left = left + "px";
     // Minimum 0.6em width so end-of-line / end-of-text shows a visible block
     // even when the measured marker is just a nbsp.
-    const minWidth = parseFloat(cs.fontSize) * 0.6;
+    const minWidth = cachedFontSize * 0.6;
     caretOverlay.style.width = Math.max(markerRect.width, minWidth) + "px";
     caretOverlay.style.height = markerRect.height + "px";
     caretOverlay.textContent = glyph;
     caretOverlay.classList.add("is-visible");
   }
 
+  let caretRaf = 0;
   function scheduleCaretSync() {
-    requestAnimationFrame(syncCaretOverlay);
+    if (caretRaf) return;
+    caretRaf = requestAnimationFrame(() => {
+      caretRaf = 0;
+      syncCaretOverlay();
+    });
   }
 
   function getScrollContainer() {
@@ -341,8 +346,18 @@
     try { input.setSelectionRange(safe, safe); } catch (_) {}
   }
 
+  let restoreRaf1 = 0;
+  let restoreRaf2 = 0;
+  let restoreRaf3 = 0;
+  function cancelRestoreRafs() {
+    if (restoreRaf1) { cancelAnimationFrame(restoreRaf1); restoreRaf1 = 0; }
+    if (restoreRaf2) { cancelAnimationFrame(restoreRaf2); restoreRaf2 = 0; }
+    if (restoreRaf3) { cancelAnimationFrame(restoreRaf3); restoreRaf3 = 0; }
+  }
+
   function restoreReadingScroll() {
     if (!input) return;
+    cancelRestoreRafs();
     const hasSelection = pendingSelectionStart != null;
     const apply = () => {
       syncMirrorStyle();
@@ -373,11 +388,18 @@
       }
     };
     apply();
-    requestAnimationFrame(apply);
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    restoreRaf1 = requestAnimationFrame(() => {
+      restoreRaf1 = 0;
       apply();
-      scheduleCaretSync();
-    }));
+    });
+    restoreRaf2 = requestAnimationFrame(() => {
+      restoreRaf2 = 0;
+      restoreRaf3 = requestAnimationFrame(() => {
+        restoreRaf3 = 0;
+        apply();
+        scheduleCaretSync();
+      });
+    });
   }
 
   function showError(message) {
@@ -507,13 +529,28 @@
     );
   }
 
+  let isComposing = false;
   if (input) {
-    input.addEventListener("beforeinput", () => {
+    input.addEventListener("compositionstart", () => {
+      isComposing = true;
       if (!sessionReady || applyingHistory || input.disabled) return;
       beforeInputSnapshot = editSnapshot();
     });
-    input.addEventListener("input", () => {
+    input.addEventListener("compositionend", () => {
+      isComposing = false;
       if (beforeInputSnapshot) {
+        if (beforeInputSnapshot.text !== input.value) {
+          recordHistoryStep(beforeInputSnapshot);
+        }
+        beforeInputSnapshot = null;
+      }
+    });
+    input.addEventListener("beforeinput", (e) => {
+      if (!sessionReady || applyingHistory || input.disabled || e.isComposing || isComposing) return;
+      beforeInputSnapshot = editSnapshot();
+    });
+    input.addEventListener("input", () => {
+      if (!isComposing && beforeInputSnapshot) {
         recordHistoryStep(beforeInputSnapshot);
         beforeInputSnapshot = null;
       }
@@ -542,9 +579,6 @@
   document.addEventListener("selectionchange", () => {
     if (document.activeElement === input) scheduleCaretSync();
   });
-  if (editScroller) {
-    editScroller.addEventListener("scroll", scheduleCaretSync, { passive: true });
-  }
 
   window.addEventListener("resize", () => {
     syncMirrorStyle();
@@ -553,18 +587,20 @@
   });
 
   function save() {
-    if (!sessionId || !input || input.disabled) return;
-    saveBtn.disabled = true;
+    if (!sessionReady || !sessionId || !input || input.disabled || (saveBtn && saveBtn.disabled)) return;
+    if (saveBtn) saveBtn.disabled = true;
+    const savedText = input.value;
     chrome.runtime.sendMessage(
       {
         type: "applyEdit",
         sessionId,
-        text: input.value
+        text: savedText
       },
       (resp) => {
         if (saveBtn) saveBtn.disabled = false;
         if (chrome.runtime.lastError) {
           console.warn("[Baseline] applyEdit failed:", chrome.runtime.lastError);
+          showToast("Save failed");
           syncSaveState();
           return;
         }
@@ -574,7 +610,7 @@
           syncSaveState();
           return;
         }
-        baselineText = input.value;
+        baselineText = savedText;
         syncSaveState();
         showToast("Saved");
       }
@@ -595,7 +631,7 @@
   });
 
   document.addEventListener("keydown", (e) => {
-    if (!(e.metaKey || e.ctrlKey)) return;
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
     const key = e.key.toLowerCase();
     if (key === "z" && !e.shiftKey) {
       e.preventDefault();
@@ -605,6 +641,11 @@
     if ((key === "z" && e.shiftKey) || key === "y") {
       e.preventDefault();
       redo();
+      return;
+    }
+    if (key === "s") {
+      e.preventDefault();
+      save();
       return;
     }
     if (key === "enter") {

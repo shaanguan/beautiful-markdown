@@ -12,10 +12,11 @@ function buildViewerTabUrl(fields) {
   if (fields && fields.cacheKey) params.set("cacheKey", fields.cacheKey);
   if (fields && fields.editorialMode) params.set("edMode", fields.editorialMode);
   // runtime may be chrome or undefined in test
-  const getURL = (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getURL)
-    ? chrome.runtime.getURL
-    : (p) => p;
-  return getURL("viewer.html?" + params.toString());
+  const rel = "viewer.html?" + params.toString();
+  if (typeof chrome !== "undefined" && chrome.runtime && typeof chrome.runtime.getURL === "function") {
+    return chrome.runtime.getURL(rel);
+  }
+  return rel;
 }
 
 if (typeof module !== "undefined" && module.exports) {

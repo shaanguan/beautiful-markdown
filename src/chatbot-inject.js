@@ -24,38 +24,52 @@
   const POLL_INTERVAL_MS = 200;
   const POLL_TIMEOUT_MS = 12 * 1000;
 
+  function matchesDomain(h, domain) {
+    return h === domain || h.endsWith("." + domain);
+  }
+
   function botIdForHost() {
-    const h = location.hostname;
-    if (h.endsWith("qianwen.com")) return "qianwen";
-    if (h.endsWith("deepseek.com")) return "deepseek";
-    if (h.endsWith("kimi.com")) return "kimi";
+    const h = location.hostname.toLowerCase();
+    if (matchesDomain(h, "qianwen.com")) return "qianwen";
+    if (matchesDomain(h, "deepseek.com")) return "deepseek";
+    if (matchesDomain(h, "kimi.com")) return "kimi";
     return null;
+  }
+
+  function isEnabled(el) {
+    return !el.disabled && el.getAttribute("aria-disabled") !== "true";
   }
 
   // Heuristic input lookup per chatbot. SPA layouts move things around,
   // so the order of selectors matters: most specific first, then fallbacks.
   function findInput(botId) {
+    let selectors = null;
     if (botId === "qianwen") {
       // Qwen (qianwen.com) ships a contenteditable rich text input.
-      return (
-        document.querySelector('div[role="textbox"][contenteditable="true"]') ||
-        document.querySelector('[contenteditable="true"]') ||
-        document.querySelector("textarea")
-      );
+      selectors = [
+        'div[role="textbox"][contenteditable="true"]',
+        '[contenteditable="true"]',
+        "textarea"
+      ];
+    } else if (botId === "deepseek") {
+      selectors = [
+        "textarea#chat-input",
+        "textarea[placeholder]",
+        "textarea"
+      ];
+    } else if (botId === "kimi") {
+      selectors = [
+        '[role="textbox"][contenteditable="true"]',
+        '[contenteditable="true"]',
+        "textarea"
+      ];
     }
-    if (botId === "deepseek") {
-      return (
-        document.querySelector("textarea#chat-input") ||
-        document.querySelector('textarea[placeholder]') ||
-        document.querySelector("textarea")
-      );
-    }
-    if (botId === "kimi") {
-      return (
-        document.querySelector('[role="textbox"][contenteditable="true"]') ||
-        document.querySelector('[contenteditable="true"]') ||
-        document.querySelector("textarea")
-      );
+    if (!selectors) return null;
+    for (const sel of selectors) {
+      const nodes = document.querySelectorAll(sel);
+      for (const el of nodes) {
+        if (isVisible(el) && isEnabled(el)) return el;
+      }
     }
     return null;
   }
@@ -111,7 +125,9 @@
       // text and fall through to the next strategy if not.
       const ret = el.dispatchEvent(ev);
       if (!ret) return;
-      if ((el.textContent || "").indexOf(text) !== -1) return;
+      const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+      const expected = norm(text);
+      if (expected && norm(el.textContent).indexOf(expected) !== -1) return;
     } catch (_) {}
 
     // Strategy 2: execCommand("insertText") — used to be the default; works
@@ -154,8 +170,12 @@
       const el = findInput(botId);
       if (el && isVisible(el)) {
         done = true;
-        try { inject(el, text); }
-        catch (e) { console.warn("[Baseline] chatbot inject failed:", e); }
+        try {
+          inject(el, text);
+          try { chrome.storage.local.remove(STORAGE_KEY); } catch (_) {}
+        } catch (e) {
+          console.warn("[Baseline] chatbot inject failed:", e);
+        }
         return;
       }
       if (Date.now() - start >= POLL_TIMEOUT_MS) {
@@ -182,8 +202,6 @@
       if (!payload || !payload.text) return;
       const fresh = Date.now() - (payload.ts || 0) < FRESHNESS_MS;
       if (!fresh || payload.botId !== myBot) return;
-      // Clear immediately so a soft reload doesn't re-inject.
-      try { chrome.storage.local.remove(STORAGE_KEY); } catch (_) {}
       pollAndInject(myBot, String(payload.text));
     });
   }

@@ -2,41 +2,172 @@
    `claude-typora-theme v1.0.0` attribution could not be traced to a public
    upstream, so this file deliberately makes no upstream claim. */
 
-html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered {
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-claude-accent: #D97757;
+  --bsw-claude-accent-hover: #C86A4D;
+  --bsw-claude-hairline: rgba(31, 30, 29, 0.12);
+  --bsw-claude-wash: rgba(31, 30, 29, 0.03);
+  --bsw-claude-inline-code-bg: #EFECE3;
+  --bsw-claude-inline-code-border: rgba(31, 30, 29, 0.09);
+  --bsw-claude-inline-code-fg: #7D2D1D;
+  --bsw-claude-highlight: rgba(217, 119, 87, 0.22);
+  --bsw-quote-rule-color: color-mix(in srgb, #D97757 42%, rgba(31, 30, 29, 0.22));
+  --bsw-theme-marker-color: color-mix(in srgb, var(--text-normal) 42%, transparent);
+
   font-weight: 400;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-spacing-trim: trim-start;
+  text-autospace: normal;
+  hanging-punctuation: allow-end;
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(h1, h2, h3, h4, h5, h6) {
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-claude-accent: #E08868;
+  --bsw-claude-accent-hover: #EDA082;
+  --bsw-claude-hairline: rgba(222, 220, 209, 0.14);
+  --bsw-claude-wash: rgba(222, 220, 209, 0.045);
+  --bsw-claude-inline-code-bg: #363532;
+  --bsw-claude-inline-code-border: rgba(222, 220, 209, 0.11);
+  --bsw-claude-inline-code-fg: #F2A88D;
+  --bsw-claude-highlight: rgba(217, 119, 87, 0.34);
+  --bsw-quote-rule-color: color-mix(in srgb, #E08868 48%, rgba(222, 220, 209, 0.2));
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(p, li, blockquote, td) {
+  text-wrap: pretty;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(h1, h2, h3, h4, h5, h6) {
   letter-spacing: normal !important;
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view a {
-  color: var(--link-color);
-  text-decoration: underline;
-  text-decoration-color: currentColor;
-  text-underline-offset: 2px;
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h1 {
+  letter-spacing: -0.015em !important;
+  line-height: 1.22 !important;
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view a:hover {
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h2 {
+  letter-spacing: -0.01em !important;
+}
+
+/* Trim redundant top whitespace when a title opens the document. */
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > :is(h1, h2):first-child {
+  margin-top: 0.25em !important;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .markdown-preview-sizer > .bsw-fm-container + :is(h1, h2) {
+  margin-top: 0.75em !important;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h5 {
+  color: color-mix(in srgb, var(--text-normal) 84%, transparent) !important;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) h6 {
+  color: color-mix(in srgb, var(--text-normal) 66%, transparent) !important;
+  letter-spacing: 0.03em !important;
+}
+
+/* Links: clean CJK-safe underline offset; warms into terracotta on hover. */
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link) {
+  color: var(--link-color);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 36%, transparent);
+  text-underline-offset: 0.26em;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) a:not(.bsw-heading-anchor):not(.tag):not(.internal-link):hover {
   color: var(--link-color-hover);
   text-decoration-color: var(--link-color-hover);
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view ::selection {
-  background-color: var(--interactive-accent);
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) a.internal-link {
+  color: var(--link-color);
+  text-decoration: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--bsw-claude-accent) 55%, transparent);
+  padding-bottom: 0.04em;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) a.internal-link:hover {
+  color: var(--bsw-claude-accent);
+  border-bottom-style: solid;
+  border-bottom-color: currentColor;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) a.tag {
+  background: color-mix(in srgb, var(--bsw-claude-accent) 11%, transparent);
+  color: var(--bsw-claude-accent);
+  border: 1px solid color-mix(in srgb, var(--bsw-claude-accent) 22%, transparent);
+  padding: 0.04em 0.52em;
+  font-size: 0.84em;
+  font-weight: 500;
+  line-height: 1.5;
+  text-decoration: none;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) a.tag:hover {
+  background: color-mix(in srgb, var(--bsw-claude-accent) 18%, transparent);
+}
+
+/* Warm terracotta highlight wash and tactile keycaps. */
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) mark {
+  background: var(--bsw-claude-highlight) !important;
+  color: var(--text-normal) !important;
+  padding: 0.04em 0.22em !important;
+  border-radius: 4px !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) del {
+  color: color-mix(in srgb, var(--text-normal) 54%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--text-normal) 42%, transparent);
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  line-height: 1.2;
+  margin-inline: 0.12em;
+  padding: 0.14em 0.42em;
+  border-radius: 6px;
+  border: 1px solid var(--bsw-claude-hairline);
+  border-bottom-width: 2px;
+  background: var(--bsw-claude-inline-code-bg);
   color: var(--text-normal);
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view :not(pre) > code {
+html[data-bsw-preset="claude"] .markdown-preview-view ::selection {
+  background-color: rgba(217, 119, 87, 0.24);
+  color: var(--text-normal);
+}
+
+html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view ::selection {
+  background-color: rgba(217, 119, 87, 0.35);
+  color: var(--text-normal);
+}
+
+/* Distinct warm stone pill for inline code (presets/claude.json maps
+   --background-secondary to #FAF9F5 in light mode, identical to the page). */
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) :not(pre) > code {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  border: 0;
-  border-radius: 6px;
-  padding: 0.12em 0.4em;
-  background: var(--background-secondary) !important;
+  border: 1px solid var(--bsw-claude-inline-code-border) !important;
+  border-radius: 6px !important;
+  padding: 0.12em 0.4em !important;
+  background: var(--bsw-claude-inline-code-bg) !important;
+  color: var(--bsw-claude-inline-code-fg) !important;
+  font-variant-ligatures: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view:not(:has(.bsw-open-empty)) a > code {
+  color: inherit !important;
 }
 
 html[data-bsw-preset="claude"] .markdown-preview-view pre code {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.875em !important;
 }
 
 /* Code is one of the few places where Claude Docs deliberately uses color.
@@ -66,6 +197,7 @@ html[data-bsw-preset="claude"] body.theme-light .markdown-preview-view :is(
   .hljs-comment, .hljs-quote
 ) {
   color: #73726c !important;
+  font-style: italic;
 }
 
 html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view .hljs {
@@ -92,56 +224,83 @@ html[data-bsw-preset="claude"] body.theme-dark .markdown-preview-view :is(
   .hljs-comment, .hljs-quote
 ) {
   color: #9c9a92 !important;
+  font-style: italic;
 }
 
 /* Claude Docs uses a dual type system: editorial titles are serif, while
    prose, structural headings, navigation and data remain sans-serif. */
-html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(h1, h2) {
-  font-family: "Anthropic Serif", Georgia, "Songti SC", "STSong", "Times New Roman", serif !important;
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(h1, h2) {
+  font-family: "Anthropic Serif", Georgia, "Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC", "Times New Roman", serif !important;
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(h3, h4, h5, h6),
-html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered :is(p, li, table, blockquote) {
-  font-family: "Anthropic Sans", system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif !important;
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(h3, h4, h5, h6),
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) :is(p, li, table, blockquote) {
+  font-family: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif !important;
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered pre {
-  border: 0.5px solid var(--background-modifier-border) !important;
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) {
+  border: 1px solid var(--background-modifier-border) !important;
   border-radius: 12px !important;
   background: var(--bsw-theme-code-surface) !important;
+  font-variant-ligatures: none;
+  tab-size: 2;
 }
 
-html[data-bsw-preset="claude"] body.theme-light .app-container .markdown-preview-view.markdown-rendered {
+html[data-bsw-preset="claude"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
   --bsw-theme-code-surface: #fff;
 }
+html[data-bsw-preset="claude"] body.theme-light .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) pre:not(.mermaid) {
+  box-shadow: 0 1px 2px rgba(20, 20, 19, 0.03) !important;
+}
 
-html[data-bsw-preset="claude"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered {
+html[data-bsw-preset="claude"] body.theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
   --bsw-theme-code-surface: #30302e;
+}
+
+/* Nested unordered bullets harmonize with muted ordered markers. */
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul > li:not(.task-list-item)::before {
+  background: transparent;
+  border: 1.4px solid var(--bsw-theme-marker-color);
+  box-sizing: border-box;
+  width: 0.4em;
+  height: 0.4em;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) ul ul ul > li:not(.task-list-item)::before {
+  background: var(--bsw-theme-marker-color);
+  border: 0;
+  border-radius: 1.5px;
+  width: 0.3em;
+  height: 0.3em;
 }
 
 /* Claude's table identity is expressed only through tokens; the shared
    typography layer owns padding, overflow, borders and row geometry. */
-html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered {
-  --bsw-theme-table-head-line: rgba(31, 30, 29, 0.15);
-  --bsw-theme-table-row-line: rgba(31, 30, 29, 0.15);
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-theme-table-head-line: rgba(31, 30, 29, 0.22);
+  --bsw-theme-table-row-line: rgba(31, 30, 29, 0.12);
 }
 
-html[data-bsw-preset="claude"] .theme-dark .app-container .markdown-preview-view.markdown-rendered {
-  --bsw-theme-table-head-line: rgba(222, 220, 209, 0.15);
-  --bsw-theme-table-row-line: rgba(222, 220, 209, 0.15);
+html[data-bsw-preset="claude"] .theme-dark .app-container .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) {
+  --bsw-theme-table-head-line: rgba(222, 220, 209, 0.22);
+  --bsw-theme-table-row-line: rgba(222, 220, 209, 0.12);
 }
 
-html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered table {
-  font-family: "Anthropic Sans", system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif !important;
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) table {
+  font-family: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif !important;
   font-size: 14px !important;
-  line-height: 1.4 !important;
+  line-height: 1.45 !important;
   color: var(--text-normal) !important;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* Claude Docs gives data tables a wider working measure than prose. Preserve
-   the prose left axis, expand only toward the free right side, and collapse
-   back to the available column on narrow screens. */
-html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+/* Claude Docs gives top-level data tables and code blocks a wider working
+   measure than prose. Preserve the prose left axis, expand only toward the
+   free right side, and collapse back to the available column on narrow
+   screens, two-pane mode, expanded TOC, nested blocks, or print. */
+html[data-bsw-preset="claude"] body:not(.bsw-twopane-active) .app-container .view-content:not(.bsw-toc-expanded) .markdown-preview-view.markdown-rendered .markdown-preview-sizer > .bsw-table-wrap {
   width: min(56rem, calc(100vw - 2 * clamp(20px, 6vw, 80px))) !important;
   max-width: none !important;
 }
@@ -151,10 +310,18 @@ html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-re
   background: transparent !important;
 }
 
-html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table > thead > tr > th,
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table > thead > tr > th {
+  border-bottom-width: 1px !important;
+  background: transparent !important;
+  vertical-align: bottom;
+}
 html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table > tbody > tr > td {
   border-bottom-width: 0.5px !important;
   background: transparent !important;
+  vertical-align: top;
+}
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table > tbody > tr:hover > td {
+  background: var(--bsw-claude-wash) !important;
 }
 
 html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table :is(th, td):first-child {
@@ -167,6 +334,44 @@ html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-re
 
 html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered pre {
   box-sizing: border-box !important;
+}
+
+html[data-bsw-preset="claude"] body:not(.bsw-twopane-active) .app-container .view-content:not(.bsw-toc-expanded) .markdown-preview-view.markdown-rendered .markdown-preview-sizer > pre {
   width: min(56rem, calc(100vw - 2 * clamp(20px, 6vw, 80px))) !important;
   max-width: none !important;
+}
+
+html[data-bsw-preset="claude"] body.bsw-twopane-active .app-container .markdown-preview-view.markdown-rendered :is(pre, .bsw-table-wrap),
+html[data-bsw-preset="claude"] .app-container .view-content.bsw-toc-expanded .markdown-preview-view.markdown-rendered :is(pre, .bsw-table-wrap),
+html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered :is(blockquote, li) :is(pre, .bsw-table-wrap) {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) img:not(.emoji):not([width="16"]):not([height="16"]) {
+  border-radius: 8px;
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) p > img:only-child:not(.emoji):not([width="16"]):not([height="16"]) {
+  box-shadow: 0 0 0 1px var(--bsw-claude-hairline);
+}
+html[data-bsw-preset="claude"] .markdown-preview-view.markdown-rendered:not(:has(.bsw-open-empty)) .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.25em;
+}
+
+@media print {
+  html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered :is(pre, .bsw-table-wrap),
+  html[data-bsw-preset="claude"] body:not(.bsw-twopane-active) .app-container .view-content:not(.bsw-toc-expanded) .markdown-preview-view.markdown-rendered .markdown-preview-sizer > :is(pre, .bsw-table-wrap) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered pre:not(.mermaid) {
+    box-shadow: none !important;
+    background: transparent !important;
+    border-color: #ccc !important;
+  }
+  html[data-bsw-preset="claude"] .app-container .markdown-preview-view.markdown-rendered table > tbody > tr:hover > td {
+    background: transparent !important;
+  }
 }

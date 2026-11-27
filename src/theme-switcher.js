@@ -549,9 +549,10 @@
       setOpenPanel(null);
     };
     document.addEventListener("keydown", onKey);
-    document.addEventListener("bsw:toolbar-open", () => {
+    const onToolbarOpen = () => {
       if (state.openPanel) setOpenPanel(null);
-    });
+    };
+    document.addEventListener("bsw:toolbar-open", onToolbarOpen);
 
     // next: "theme" | "translate" | "apikey" | null. The three panels are
     // mutually exclusive — opening one closes the others.
@@ -686,6 +687,7 @@
       for (const btn of presetButtons.values()) btn.disabled = busy;
       for (const btn of customButtons.values()) btn.disabled = busy;
       if (langSelect) langSelect.disabled = busy;
+      if (sourceLangSelect) sourceLangSelect.disabled = busy;
       importBtn.disabled = busy;
       // The API Key toggle is a panel-switch, not a translation control,
       // but opening it mid-stream would let a user save a different model
@@ -838,7 +840,12 @@
     setPreset(state.preset);
     setMode(state.mode);
     setWidth(state.width);
-    setColorScheme(state.mode === "dark" ? "dark" : "light");
+    const initialResolved = state.mode === "dark"
+      ? "dark"
+      : state.mode === "light"
+        ? "light"
+        : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    setColorScheme(initialResolved);
     paintTranslate();
 
     root_.appendChild(themePanel);
@@ -863,6 +870,10 @@
     function destroy() {
       document.removeEventListener("click", onDocClick);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("bsw:toolbar-open", onToolbarOpen);
+      if (settingsView && typeof settingsView.destroy === "function") {
+        settingsView.destroy();
+      }
       backdrop.remove();
       root_.remove();
     }
@@ -952,6 +963,9 @@
           const base = f.name.replace(/\.json$/i, "").replace(/[-_]+/g, " ").trim();
           if (base) nameInput.value = base;
         }
+      };
+      reader.onerror = () => {
+        showError("Could not read file.");
       };
       reader.readAsText(f);
       fileInput.value = "";
@@ -1351,13 +1365,18 @@
         document.addEventListener("mousedown", onOutside, true);
         modelPanel.addEventListener("keydown", (e) => {
           if (e.key === "Escape") {
+            e.stopPropagation();
+            e.preventDefault();
             closeModelPanel();
             modelInput.focus();
           }
         });
         modelInput.addEventListener("keydown", (e) => {
-          if (e.key === "Escape" && !modelPanel.hidden) closeModelPanel();
-          else if (e.key === "ArrowDown" && modelPanel.hidden) {
+          if (e.key === "Escape" && !modelPanel.hidden) {
+            e.stopPropagation();
+            e.preventDefault();
+            closeModelPanel();
+          } else if (e.key === "ArrowDown" && modelPanel.hidden) {
             e.preventDefault();
             openModelPanel();
             const first = modelPanel.querySelector(".bsw-combo-option");
@@ -1457,7 +1476,11 @@
         return;
       }
       showError("");
-      onSubmit(collected);
+      Promise.resolve(onSubmit(collected)).catch((err) => {
+        const msg = (err && (err.message || err.toString())) || "Could not save settings.";
+        showError(msg);
+        try { setBusy(false); } catch (_) { /* no-op */ }
+      });
     });
 
     // Right-aligned, Cancel ▸ Save with a small gap. .bsw-import-actions
@@ -1560,8 +1583,12 @@
       if (fields.apiKey) fields.apiKey.focus();
     }
 
+    function destroy() {
+      flushComboCleanups();
+    }
+
     refresh(initial);
-    return { root: root_, refresh, showError, setBusy, focus };
+    return { root: root_, refresh, showError, setBusy, focus, destroy };
   }
 
   function tryParseJSON(text) {

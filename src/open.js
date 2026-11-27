@@ -31,7 +31,6 @@
       const items = await chrome.storage.session.get(key);
       const payload = items && items[key];
       if (!payload || !payload.markdown) return null;
-      chrome.storage.session.remove(key);
       try {
         const libId = await window.BaselineShared.saveLibraryDoc({
           name: payload.name || "clipping.md",
@@ -39,6 +38,7 @@
           source: "clip",
           url: payload.url || ""
         });
+        chrome.storage.session.remove(key);
         history.replaceState(null, "", "open.html?doc=" + libId);
       } catch (e) {
         console.warn("[Baseline] clip → library save failed:", e);

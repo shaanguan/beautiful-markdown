@@ -3,7 +3,7 @@
   "name": "Beautiful Markdown",
   "version": "1.7.3",
   "description": "Render .md files in Chrome with the Obsidian Baseline theme. Supports presets, KaTeX, Mermaid, and Obsidian-style links. © 2026 zhoubo. All rights reserved.",
-  "minimum_chrome_version": "90",
+  "minimum_chrome_version": "111",
   "permissions": ["storage", "downloads", "scripting", "contextMenus"],
   "host_permissions": [
     "file:///*",
@@ -32,6 +32,10 @@
         "file:///*",
         "http://*/*",
         "https://*/*"
+      ],
+      "exclude_matches": [
+        "*://github.com/*/blob/*",
+        "*://gitlab.com/*/blob/*"
       ],
       "include_globs": [
         "*.md",  "*.md?*",  "*.md#*",
@@ -75,7 +79,9 @@
         "styles/theme.css",
         "styles/extension.css",
         "styles/typography.css",
-        "styles/claude-preset.css"
+        "styles/vibe-preset.css",
+        "styles/claude-preset.css",
+        "styles/presets-polish.css"
       ],
       "run_at": "document_end",
       "all_frames": false

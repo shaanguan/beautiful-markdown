@@ -434,6 +434,7 @@
     let leftMountEl = null;
     let leftRendered = false;
     let scrollSyncTeardown = null;
+    let invalidateScrollSyncCache = () => {};
     const rightView = mountEl.closest(".view-content");
     const leafContent = rightView && rightView.parentNode;
 
@@ -442,6 +443,7 @@
         scrollSyncTeardown();
         scrollSyncTeardown = null;
       }
+      invalidateScrollSyncCache = () => {};
     }
 
     function maybeSetupScrollSync() {
@@ -451,6 +453,8 @@
     }
 
     let port = null;
+    let editAppliedListener = null;
+    let onBeforeUnload = null;
     let syncStorageListener = null;
     let schemeMq = null;
     let onSchemeChange = null;
@@ -560,7 +564,7 @@
       });
     }
 
-    chrome.runtime.onMessage.addListener((msg) => {
+    editAppliedListener = (msg) => {
       if (!msg || msg.type !== "baselineEditApplied" || handedOff) return;
       const apply = () => {
         if (msg.column === "left") {
@@ -576,6 +580,7 @@
         const savedScroll = readColumnScroll(mountEl);
         renderPreviewMarkdown(mountEl, msg.text, activePreset)
           .then(() => {
+            invalidateScrollSyncCache();
             restoreColumnScroll(mountEl, savedScroll);
             rightDirty = true;
             mountRightChrome();
@@ -590,7 +595,15 @@
         if (!tab || tab.id !== msg.targetTabId) return;
         apply();
       });
-    });
+    };
+    chrome.runtime.onMessage.addListener(editAppliedListener);
+
+    onBeforeUnload = (e) => {
+      if (!rightDirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
 
     // ── AI triggers (editorial + translate) for viewer toolbar ──
     var viewerTranslatorSettings = null;
@@ -673,9 +686,9 @@
       applyWidth(value);
       if (value === "bilingual") enableBilingual();
       else disableBilingual();
-      if (rightChromeHandle && typeof rightChromeHandle.reconnectSpy === "function") {
-        rightChromeHandle.reconnectSpy();
-      }
+      Promise.resolve(rightChromeHandle).then((h) => {
+        if (h && typeof h.reconnectSpy === "function") h.reconnectSpy();
+      });
       persistReadingPrefs();
     }
 
@@ -757,6 +770,10 @@
         if (rightView) pasteBinder.unregister(rightView);
         if (leftView) pasteBinder.unregister(leftView);
       }
+      if (dropBinder) {
+        if (rightView) dropBinder.unregister(rightView);
+        if (leftView) dropBinder.unregister(leftView);
+      }
       document.getElementById("baseline-switcher")?.remove();
       document.getElementById("bsw-viewer-status")?.remove();
       document.querySelector(".app-container")?.remove();
@@ -765,6 +782,16 @@
         chrome.storage.onChanged.removeListener(syncStorageListener);
         syncStorageListener = null;
       }
+      if (editAppliedListener) {
+        chrome.runtime.onMessage.removeListener(editAppliedListener);
+        editAppliedListener = null;
+      }
+      if (onBeforeUnload) {
+        window.removeEventListener("beforeunload", onBeforeUnload);
+        onBeforeUnload = null;
+      }
+      if (leftFileInput) leftFileInput.remove();
+      if (rightFileInput) rightFileInput.remove();
       if (schemeMq && onSchemeChange) {
         schemeMq.removeEventListener("change", onSchemeChange);
         schemeMq = null;
@@ -818,19 +845,63 @@
       })
       : null;
 
+    const dropBinder = window.BaselineTOC && window.BaselineTOC.bindColumnDrop
+      ? window.BaselineTOC.bindColumnDrop()
+      : null;
+
+    async function handleViewerDroppedFile(payload) {
+      if (handedOff || !payload) return;
+      let handle = null;
+      if (payload.handlePromise) {
+        try {
+          const resolved = await payload.handlePromise;
+          if (resolved && resolved.kind === "file") handle = resolved;
+        } catch (_) {}
+      }
+      const readable = payload.file || (handle ? await handle.getFile().catch(() => null) : null);
+      if (!readable) return;
+      try {
+        const text = await readable.text();
+        const name = (payload.file && payload.file.name) || (handle && handle.name) || "";
+        if (handle && window.BaselineShared && typeof window.BaselineShared.recordRecentHandle === "function") {
+          window.BaselineShared.recordRecentHandle(handle, name).catch(() => {});
+        }
+        ingestMarkdown(text, name);
+      } catch (err) {
+        console.warn("[Baseline] dropped file read failed:", err);
+        window.alert("无法读取拖入的文件，请确认拖入的是 Markdown 或文本文件。");
+      }
+    }
+
     function syncPasteRegistry() {
-      if (handedOff || !pasteBinder || !rightView) return;
-      pasteBinder.register(rightView, {
-        hasContent: () => Boolean((rightMarkdown || lastText || "").trim()),
-        onPaste: (text) => { ingestMarkdown(text, "Pasted content"); }
-      });
-      if (bilingualOn && leftView) {
-        pasteBinder.register(leftView, {
-          hasContent: () => Boolean(originalMarkdown && originalMarkdown.trim()),
+      if (handedOff || !rightView) return;
+      if (pasteBinder) {
+        pasteBinder.register(rightView, {
+          hasContent: () => Boolean((rightMarkdown || lastText || "").trim()),
           onPaste: (text) => { ingestMarkdown(text, "Pasted content"); }
         });
-      } else if (leftView) {
-        pasteBinder.unregister(leftView);
+        if (bilingualOn && leftView) {
+          pasteBinder.register(leftView, {
+            hasContent: () => Boolean(originalMarkdown && originalMarkdown.trim()),
+            onPaste: (text) => { ingestMarkdown(text, "Pasted content"); }
+          });
+        } else if (leftView) {
+          pasteBinder.unregister(leftView);
+        }
+      }
+      if (dropBinder) {
+        dropBinder.register(rightView, {
+          label: "松开以打开 Markdown 文件",
+          onDrop: handleViewerDroppedFile
+        });
+        if (bilingualOn && leftView) {
+          dropBinder.register(leftView, {
+            label: "松开以打开 Markdown 文件",
+            onDrop: handleViewerDroppedFile
+          });
+        } else if (leftView) {
+          dropBinder.unregister(leftView);
+        }
       }
     }
 
@@ -860,6 +931,7 @@
       renderPreviewMarkdown(leftMountEl, originalMarkdown, activePreset)
         .then(() => {
           leftRendered = true;
+          invalidateScrollSyncCache();
           mountLeftChrome();
           syncPasteRegistry();
           maybeSetupScrollSync();
@@ -869,9 +941,8 @@
 
     // Build a paragraph index for one scroll container — list of
     // { top, el } where top is the block's offset relative to the
-    // container's scroll content. Cheap to rebuild (a few hundred blocks
-    // max), so we recompute on each sync rather than invalidating on
-    // every chunk re-render.
+    // container's scroll content. Cached per column inside setupScrollSync
+    // and invalidated on render or sizer resize.
     function indexBlocks(container) {
       const sizer = container.querySelector(".markdown-preview-sizer");
       if (!sizer) return [];
@@ -890,6 +961,36 @@
       let activeSide = "left";
       let suppress = false;
       let raf = 0;
+      let leftCache = null;
+      let rightCache = null;
+
+      invalidateScrollSyncCache = () => {
+        leftCache = null;
+        rightCache = null;
+      };
+
+      const leftSizer = leftView.querySelector(".markdown-preview-sizer");
+      const rightSizer = rightView.querySelector(".markdown-preview-sizer");
+      let ro = null;
+      if (typeof ResizeObserver === "function") {
+        ro = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.target === leftSizer) leftCache = null;
+            else if (entry.target === rightSizer) rightCache = null;
+          }
+        });
+        if (leftSizer) ro.observe(leftSizer);
+        if (rightSizer) ro.observe(rightSizer);
+      }
+
+      function getBlocks(side) {
+        if (side === "left") {
+          if (!leftCache) leftCache = indexBlocks(leftView);
+          return leftCache;
+        }
+        if (!rightCache) rightCache = indexBlocks(rightView);
+        return rightCache;
+      }
 
       const onEnterLeft = () => { activeSide = "left"; };
       const onEnterRight = () => { activeSide = "right"; };
@@ -900,8 +1001,8 @@
         if (suppress) return;
         const src = side === "left" ? leftView : rightView;
         const dst = side === "left" ? rightView : leftView;
-        const srcIdx = indexBlocks(src);
-        const dstIdx = indexBlocks(dst);
+        const srcIdx = getBlocks(side);
+        const dstIdx = getBlocks(side === "left" ? "right" : "left");
         if (!srcIdx.length || !dstIdx.length) return;
         // "Anchor" line ~40px below the column's top — a block whose top
         // is at or above this line is "current."
@@ -936,6 +1037,7 @@
         rightView.removeEventListener("scroll", onRightScroll);
         leftView.removeEventListener("mouseenter", onEnterLeft);
         rightView.removeEventListener("mouseenter", onEnterRight);
+        if (ro) ro.disconnect();
         if (raf) cancelAnimationFrame(raf);
       };
     }
@@ -988,6 +1090,7 @@
         leftChromeHandle = null;
       }
       if (leftView && pasteBinder) pasteBinder.unregister(leftView);
+      if (leftView && dropBinder) dropBinder.unregister(leftView);
       if (leftView && leftView.parentNode) leftView.parentNode.removeChild(leftView);
       leftView = null;
       leftMountEl = null;
@@ -1057,9 +1160,9 @@
     // enableBilingual after chrome exists (mirrors split restore on .md).
     if (lastWidth === "bilingual") {
       enableBilingual();
-      if (rightChromeHandle && typeof rightChromeHandle.setActiveWidth === "function") {
-        rightChromeHandle.setActiveWidth("bilingual");
-      }
+      Promise.resolve(rightChromeHandle).then((h) => {
+        if (h && typeof h.setActiveWidth === "function") h.setActiveWidth("bilingual");
+      });
       switcher.setWidth("bilingual");
     }
 
@@ -1157,9 +1260,10 @@
         }
         pendingRender = pendingRender
           .catch(() => {})
-          .then(() => done
+          .then(() => (done || handedOff)
             ? undefined
-            : renderPreviewMarkdown(mountEl, lastText, activePreset));
+            : renderPreviewMarkdown(mountEl, lastText, activePreset, { streaming: true })
+                .then(() => invalidateScrollSyncCache()));
       }, RENDER_THROTTLE_MS);
     }
 
@@ -1201,18 +1305,30 @@
             var edUrl = chrome.runtime.getURL("editorial.html");
             var w2 = window.open(edUrl, "_blank");
             if (w2) {
-              window.addEventListener("message", function edReady(e) {
+              var edTimer = 0;
+              var cleanupEdReady = function () {
+                if (edTimer) { clearTimeout(edTimer); edTimer = 0; }
+                window.removeEventListener("message", edReady);
+              };
+              function edReady(e) {
+                if (w2.closed) { cleanupEdReady(); return; }
+                if (e.origin !== location.origin || e.source !== w2) return;
                 if (e.data && e.data.type === "editorial-ready") {
-                  window.removeEventListener("message", edReady);
-                  w2.postMessage({ type: "editorial-html", html: edHtml }, chrome.runtime.getURL(""));
+                  cleanupEdReady();
+                  w2.postMessage({ type: "editorial-html", html: edHtml }, location.origin);
                 }
-              });
+              }
+              window.addEventListener("message", edReady);
+              edTimer = setTimeout(cleanupEdReady, 30000);
             }
           }
           // Download to subfolder and cache path
           var edFolders = { slides: "AI Slides", report: "AI Report", dashboard: "AI Dashboard" };
           var folder = edFolders[editorialMode] || "AI Slides";
-          var base = (sourceName || "document").replace(/\.[^.]+$/, "");
+          var rawBase = (sourceName || "document").replace(/\.[^.]+$/, "");
+          var base = window.BaselineShared && typeof window.BaselineShared.sanitizeFilenamePart === "function"
+            ? window.BaselineShared.sanitizeFilenamePart(rawBase, "document")
+            : rawBase;
           var dlFilename = "Beautiful Markdown/" + folder + "/" + base + ".html";
           var blob = new Blob([edHtml], { type: "text/html;charset=utf-8" });
           var dlUrl = URL.createObjectURL(blob);
@@ -1256,8 +1372,13 @@
         }
         pendingRender
           .catch(() => {})
-          .then(() => renderPreviewMarkdown(mountEl, lastText, activePreset))
           .then(() => {
+            if (handedOff) return;
+            return renderPreviewMarkdown(mountEl, lastText, activePreset);
+          })
+          .then(() => {
+            if (handedOff) return;
+            invalidateScrollSyncCache();
             mountRightChrome();
             syncPasteRegistry();
           })

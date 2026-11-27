@@ -484,11 +484,13 @@
     // phrasing content inside <button>) and sits 4px below the label.
     btn.innerHTML = FOLDER_ICON +
       '<span class="bsw-pick-textstack">' +
-        '<span class="bsw-pick-label">' + label + '</span>' +
+        '<span class="bsw-pick-label"></span>' +
         '<span class="bsw-split-empty-note bsw-open-paste-hint">' +
           "Or press <kbd>" + mod + "</kbd> + <kbd>V</kbd> to paste Markdown" +
         '</span>' +
       '</span>';
+    const pickLabelEl = btn.querySelector(".bsw-pick-label");
+    if (pickLabelEl) pickLabelEl.textContent = label || "";
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       onPick();
@@ -533,7 +535,7 @@
         excludeAcceptAllOption: false
       });
     } catch (e) {
-      if (e && (e.name === "AbortError" || e.code === 20)) return null;
+      if (e && (e.name === "AbortError" || e.code === 20)) return { cancelled: true };
       console.warn("[Baseline] showOpenFilePicker failed:", e);
       return null;
     }
@@ -844,17 +846,17 @@
       if (lastWidth === "split") {
         if (!splitOn) enableSplit();
         if (switcherRef) switcherRef.setWidth("split");
-        if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-          mainChromeHandle.setActiveWidth("split");
-        }
+        Promise.resolve(mainChromeHandle).then((h) => {
+          if (h && typeof h.setActiveWidth === "function") h.setActiveWidth("split");
+        });
         return;
       }
       if (splitOn) return;
       applyWidth(lastWidth);
       if (switcherRef) switcherRef.setWidth(lastWidth);
-      if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-        mainChromeHandle.setActiveWidth(lastWidth);
-      }
+      Promise.resolve(mainChromeHandle).then((h) => {
+        if (h && typeof h.setActiveWidth === "function") h.setActiveWidth(lastWidth);
+      });
     }
 
     // Lazy scaffold: for the blank-tab empty state we skip the 11-layer
@@ -1177,9 +1179,14 @@
       search.placeholder = "搜索标题或内容…";
       search.value = filterText || "";
       search.addEventListener("click", (ev) => ev.stopPropagation());
+      let searchTimer = 0;
       search.addEventListener("input", (ev) => {
         ev.stopPropagation();
-        paintItems(search.value);
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          searchTimer = 0;
+          paintItems(search.value);
+        }, 120);
       });
       heading.appendChild(search);
       wrap.appendChild(heading);
@@ -1292,9 +1299,9 @@
       } else {
         disableSplit();
       }
-      if (mainChromeHandle && typeof mainChromeHandle.reconnectSpy === "function") {
-        mainChromeHandle.reconnectSpy();
-      }
+      Promise.resolve(mainChromeHandle).then((h) => {
+        if (h && typeof h.reconnectSpy === "function") h.reconnectSpy();
+      });
       updateTranslateUi();
       persistReadingPrefs();
       scheduleTabSessionPersist();
@@ -1349,7 +1356,10 @@
       // Download via background and cache path
       var folders = { slides: "AI Slides", report: "AI Report", dashboard: "AI Dashboard" };
       var folder = folders[mode] || "AI Slides";
-      var base = (sourceName || "document").replace(/\.[^.]+$/, "");
+      var rawBase = (sourceName || "document").replace(/\.[^.]+$/, "");
+      var base = root.BaselineShared && typeof root.BaselineShared.sanitizeFilenamePart === "function"
+        ? root.BaselineShared.sanitizeFilenamePart(rawBase, "document")
+        : rawBase;
       var dlFilename = "Beautiful Markdown/" + folder + "/" + base + ".html";
       chrome.runtime.sendMessage({
         type: "downloadEditorial",
@@ -1848,7 +1858,8 @@
     async function pickFor(side) {
       if (!confirmDiscardIfDirty(side)) return false;
       const picked = await pickFileViaApi();
-      if (picked) {
+      if (picked && picked.cancelled) return false;
+      if (picked && typeof picked.text === "string") {
         if (picked.handle) {
           recordRecentHandle(picked.handle, picked.name).catch(() => {});
         }
@@ -1857,24 +1868,41 @@
           { fromLocalFile: true, fileHandle: picked.handle });
         return true;
       }
-      // showOpenFilePicker missing → fall back to file input.
-      if (typeof window.showOpenFilePicker !== "function") {
-        (side === "right" ? rightInput : leftInput).click();
-        return true;
+      // showOpenFilePicker unavailable or rejected (e.g. non-secure file:// context)
+      // → fall back to hidden file input.
+      (side === "right" ? rightInput : leftInput).click();
+      return true;
+    }
+
+    function isSameDocUrl(parsedTarget, pageHref) {
+      try {
+        const cur = new URL(pageHref);
+        if (parsedTarget.protocol !== cur.protocol) return false;
+        if (parsedTarget.protocol === "file:") {
+          return parsedTarget.pathname === cur.pathname && parsedTarget.search === cur.search;
+        }
+        return parsedTarget.origin === cur.origin &&
+          parsedTarget.pathname === cur.pathname &&
+          parsedTarget.search === cur.search;
+      } catch (_) {
+        return false;
       }
-      return false;
     }
 
     async function openRecentEntry(entry, side) {
       if (entry.kind === "url" && entry.url) {
+        let parsedUrl;
+        try { parsedUrl = new URL(entry.url); } catch (_) { return; }
+        if (!["http:", "https:", "file:"].includes(parsedUrl.protocol)) return;
         const target = side === "right" ? "right" : "left";
+        const isLocal = parsedUrl.protocol === "file:";
         if (splitOn || side === "right") {
           if (!confirmDiscardIfDirty(target)) return;
           try {
             let text = null;
             try {
               const res = await fetch(entry.url);
-              if (res.ok) text = await res.text();
+              if (res.ok || (isLocal && res.status === 0)) text = await res.text();
             } catch (_) { /* fetch blocked (file:// same-origin) */ }
             if (text == null) {
               try {
@@ -1883,14 +1911,29 @@
                 if (resp && resp.ok) text = resp.text;
               } catch (_) { /* bg fetch also failed */ }
             }
+            // Opening the same document currently loaded in the main column
+            // in split view: reuse in-memory leftMarkdown if fetch failed
+            // (e.g. file:// access not yet enabled or offline).
+            if (text == null && isSameDocUrl(parsedUrl, location.href) && leftMarkdown) {
+              text = leftMarkdown;
+            }
             if (text != null) {
               recordRecentUrlBump(entry).catch(() => {});
-              const isLocal = /^file:/i.test(entry.url);
               await replaceColumn(target, text, entry.name || "",
                 { fromLocalFile: isLocal });
               return;
             }
-          } catch (_) { /* all attempts failed — fall through to navigate */ }
+          } catch (_) { /* handled below */ }
+          // Never clobber the whole tab with location.href when opening into
+          // the right split pane.
+          if (target === "right") {
+            window.alert(
+              isLocal
+                ? "无法在分栏中直接读取该本地文件。\n请确认已在扩展详情页开启「允许访问文件网址」，或点击「Open Markdown file」手动选择。"
+                : "无法在分栏中读取该文档，请稍后重试。"
+            );
+            return;
+          }
         }
         recordRecentUrlBump(entry).catch(() => {});
         location.href = entry.url;
@@ -1900,11 +1943,17 @@
       if (!confirmDiscardIfDirty(target)) return;
       const loaded = await readRecentDoc(entry);
       if (!loaded) {
+        // FileSystemFileHandle entries live in the extension origin's IndexedDB
+        // and cannot be read directly from file:// / http(s):// content scripts.
+        if (entry.kind === "handle" && location.protocol !== "chrome-extension:") {
+          await pickFor(target);
+          return;
+        }
         if (window.confirm("文件无法访问，可能已被移动或删除。\n从最近列表中移除？")) {
           removeRecentDoc(entry.id).catch(() => {});
-          const view = mountEl && mountEl.closest(".view-content");
+          const view = (target === "right" ? splitView : (mountEl && mountEl.closest(".view-content")));
           const slot = view && view.querySelector(".bsw-recent-slot");
-          if (slot) refreshUnifiedList(slot, side);
+          if (slot) refreshUnifiedList(slot, side, target === "right" ? { narrow: true } : undefined);
         }
         return;
       }
@@ -1940,29 +1989,80 @@
       })
       : null;
 
+    const dropBinder = root.BaselineTOC && root.BaselineTOC.bindColumnDrop
+      ? root.BaselineTOC.bindColumnDrop()
+      : null;
+
+    async function handleDroppedFile(side, payload) {
+      const target = side === "right" ? "right" : "left";
+      if (!confirmDiscardIfDirty(target)) return;
+      const file = payload && payload.file;
+      let handle = null;
+      if (payload && payload.handlePromise) {
+        try {
+          const resolved = await payload.handlePromise;
+          if (resolved && resolved.kind === "file") handle = resolved;
+        } catch (_) { /* non-secure context or permission denied */ }
+      }
+      let text = "";
+      let name = (file && file.name) || (handle && handle.name) || "";
+      try {
+        const readable = file || (handle ? await handle.getFile() : null);
+        if (!readable) return;
+        text = await readable.text();
+        if (!name && readable.name) name = readable.name;
+      } catch (err) {
+        console.warn("[Baseline] dropped file read failed:", err);
+        window.alert("无法读取拖入的文件，请确认拖入的是 Markdown 或文本文件。");
+        return;
+      }
+      if (handle) {
+        recordRecentHandle(handle, name).catch(() => {});
+      }
+      await replaceColumn(target, text, name, {
+        fromLocalFile: true,
+        fileHandle: handle
+      });
+    }
+
     let mainPasteHost = null;
     function syncPasteRegistry() {
-      if (!pasteBinder) return;
       // Slim scaffold has no .view-content yet, so ⌘V / right-click → Paste
-      // has no registered column to route to. Fall back to document.body so
-      // the size-1 path in resolvePasteColumn picks it up; swap to the real
-      // mainView once upgradeToFullScaffold builds it.
+      // and file drop fall back to document.body; swap to the real mainView
+      // once upgradeToFullScaffold builds it.
       const desired = mainView || document.body;
       if (mainPasteHost && mainPasteHost !== desired) {
-        pasteBinder.unregister(mainPasteHost);
+        if (pasteBinder) pasteBinder.unregister(mainPasteHost);
+        if (dropBinder) dropBinder.unregister(mainPasteHost);
       }
       mainPasteHost = desired;
-      pasteBinder.register(desired, {
-        hasContent: () => Boolean(leftMarkdown && leftMarkdown.trim()),
-        onPaste: (text) => { replaceColumn("left", text, "Pasted content"); }
-      });
-      if (splitOn && splitView) {
-        pasteBinder.register(splitView, {
-          hasContent: () => Boolean(splitMountEl && splitMarkdown && splitMarkdown.trim()),
-          onPaste: (text) => { replaceColumn("right", text, "Pasted content"); }
+      if (pasteBinder) {
+        pasteBinder.register(desired, {
+          hasContent: () => Boolean(leftMarkdown && leftMarkdown.trim()),
+          onPaste: (text) => { replaceColumn("left", text, "Pasted content"); }
         });
-      } else if (splitView) {
-        pasteBinder.unregister(splitView);
+        if (splitOn && splitView) {
+          pasteBinder.register(splitView, {
+            hasContent: () => Boolean(splitMountEl && splitMarkdown && splitMarkdown.trim()),
+            onPaste: (text) => { replaceColumn("right", text, "Pasted content"); }
+          });
+        } else if (splitView) {
+          pasteBinder.unregister(splitView);
+        }
+      }
+      if (dropBinder) {
+        dropBinder.register(desired, {
+          label: () => (splitOn ? "松开以在左栏打开" : "松开以打开 Markdown 文件"),
+          onDrop: (payload) => { handleDroppedFile("left", payload); }
+        });
+        if (splitOn && splitView) {
+          dropBinder.register(splitView, {
+            label: "松开以在右栏打开",
+            onDrop: (payload) => { handleDroppedFile("right", payload); }
+          });
+        } else if (splitView) {
+          dropBinder.unregister(splitView);
+        }
       }
     }
 
@@ -2064,7 +2164,7 @@
       }
 
       syncSplitEmptyAreaClick();
-      renderPreviewMarkdown(sizer, text, lastPreset)
+      return renderPreviewMarkdown(sizer, text, lastPreset)
         .then(() => {
           bumpSplitLoaded();
           if (preserveScroll) {
@@ -2118,10 +2218,12 @@
         splitView.classList.remove("bsw-open-empty-clickable");
         splitView.removeAttribute("title");
         if (pasteBinder) pasteBinder.unregister(splitView);
+        if (dropBinder) dropBinder.unregister(splitView);
         if (splitView.parentNode) splitView.parentNode.removeChild(splitView);
       }
       splitView = null;
       splitPreview = null;
+      destroyChromeHandle(splitChromeHandle);
       splitChromeHandle = null;
       splitMountEl = null;
       ui.splitMountEl = null;
@@ -2272,9 +2374,9 @@
     // after chrome exists when the remembered preference is split.
     if (lastWidth === "split" && !splitOn) {
       enableSplit();
-      if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-        mainChromeHandle.setActiveWidth("split");
-      }
+      Promise.resolve(mainChromeHandle).then((h) => {
+        if (h && typeof h.setActiveWidth === "function") h.setActiveWidth("split");
+      });
       switcher.setWidth("split");
     }
 
@@ -2313,9 +2415,9 @@
         lastWidth = "split";
         switcher.setWidth("split");
         enableSplit();
-        if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-          mainChromeHandle.setActiveWidth("split");
-        }
+        Promise.resolve(mainChromeHandle).then((h) => {
+          if (h && typeof h.setActiveWidth === "function") h.setActiveWidth("split");
+        });
         const splitMd = saved.splitMarkdown == null ? "" : String(saved.splitMarkdown);
         if (splitMd.trim()) {
           splitFromLocalFile = !!saved.splitFromLocalFile;
@@ -2328,9 +2430,9 @@
         lastWidth = saved.width;
         switcher.setWidth(lastWidth);
         applyWidth(lastWidth);
-        if (mainChromeHandle && typeof mainChromeHandle.setActiveWidth === "function") {
-          mainChromeHandle.setActiveWidth(lastWidth);
-        }
+        Promise.resolve(mainChromeHandle).then((h) => {
+          if (h && typeof h.setActiveWidth === "function") h.setActiveWidth(lastWidth);
+        });
       }
       scheduleTabSessionPersist();
     }

@@ -153,6 +153,7 @@
     "img-grid": "class-toggle",
     "indentation-guide-color": "variable-select",
     "indentation-guide-width": "variable-number-slider",
+    "inline-title-block-off": "class-toggle",
     "inline-title-color": "variable-themed-color",
     "inline-title-font": "variable-text",
     "inline-title-size": "variable-text",
@@ -270,6 +271,30 @@
     "table-nowrap"
   ]);
 
+  function hexToRgbTriplet(hex) {
+    if (typeof hex !== "string") return null;
+    const s = hex.trim();
+    const m3 = /^#([0-9a-fA-F]{3})$/.exec(s);
+    if (m3) {
+      const h = m3[1];
+      return `${parseInt(h[0] + h[0], 16)}, ${parseInt(h[1] + h[1], 16)}, ${parseInt(h[2] + h[2], 16)}`;
+    }
+    const m6 = /^#([0-9a-fA-F]{6})$/.exec(s);
+    if (m6) {
+      const h = m6[1];
+      return `${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}`;
+    }
+    return null;
+  }
+
+  function formatVarValue(realVar, value) {
+    if (realVar.endsWith("-rgb") && typeof value === "string") {
+      const triplet = hexToRgbTriplet(value);
+      if (triplet) return triplet;
+    }
+    return value;
+  }
+
   /**
    * @param {Record<string, string|boolean|number>} preset Raw preset JSON.
    * @returns {{cssLight:string, cssDark:string, cssBoth:string,
@@ -307,7 +332,7 @@
       // baseline-style@@<var>@@light|dark color overrides.
       if (mode === "light" || mode === "dark") {
         if (value === false || value === "") continue;
-        const decl = `--${realVar}: ${value};`;
+        const decl = `--${realVar}: ${formatVarValue(realVar, value)};`;
         (mode === "light" ? lightVars : darkVars).push(decl);
         continue;
       }
@@ -333,7 +358,7 @@
 
       if (VARIABLE_TYPES.has(type)) {
         if (value === false || value === "") continue;
-        bothVars.push(`--${realVar}: ${value};`);
+        bothVars.push(`--${realVar}: ${formatVarValue(realVar, value)};`);
         continue;
       }
 

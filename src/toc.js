@@ -129,7 +129,6 @@
   // Flips below the anchor when the anchor sits too close to the top of the
   // viewport (e.g. the top-right doc tools), so the toast never lands off
   // the visible area.
-  let toastTimer = null;
   function showToast(near, message) {
     let toast = document.getElementById("baseline-toast");
     if (!toast) {
@@ -157,8 +156,11 @@
     toast.classList.toggle("is-below", flipBelow);
     toast.style.top = Math.round(flipBelow ? anchorBottom + 4 : anchorTop - 4) + "px";
     toast.classList.add("is-visible");
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 1400);
+    if (toast._bswHideTimer) clearTimeout(toast._bswHideTimer);
+    toast._bswHideTimer = setTimeout(() => {
+      toast._bswHideTimer = null;
+      toast.classList.remove("is-visible");
+    }, 1400);
   }
 
   // ── TOC sidebar ────────────────────────────────────────────────────
@@ -263,7 +265,7 @@
       });
     };
 
-    const setActive = (a, headingEl) => {
+    const setActive = (a, headingEl, opts) => {
       if (activeEl === a) return;
       if (activeEl) activeEl.classList.remove("is-active");
       activeEl = a;
@@ -280,6 +282,7 @@
       detachDriftScroll();
       if (!a) return;
       a.classList.add("is-active");
+      if (opts && opts.watchDrift === false) return;
       // Wait out the smooth scroll, then start watching for drift. We also
       // re-check on the timer fire in case the scroll already settled but
       // no further scroll events will come (so onDriftScroll wouldn't run).
@@ -346,6 +349,7 @@
     for (const h of index) {
       const tick = document.createElement("button");
       tick.type = "button";
+      tick.tabIndex = -1;
       tick.className = "bsw-toc-tick";
       tick.dataset.id = h.id;
       tick.dataset.level = String(Math.min(h.level - minLevel + 1, 4));
@@ -390,6 +394,7 @@
       return { disconnect: () => {}, pinTo: () => {} };
     }
     const scroller = getScroller();
+    const headingById = new Map(index.map((h) => [h.id, h.el]));
     let lastId = null;
     let pinnedId = null;
     let pinnedUntil = 0;
@@ -406,14 +411,15 @@
       if (tick) tick.classList.add("is-active");
       // Mirror to panel so opening the overlay shows the same active row.
       const item = id ? itemEls.get(id) : null;
-      if (item) setPanelActive(item);
+      const headingEl = id ? headingById.get(id) : null;
+      if (item) setPanelActive(item, headingEl, { watchDrift: false });
     };
     const pinTo = (id) => {
       pinnedId = id;
       pinnedUntil = Date.now() + 500;
       apply(id);
     };
-    let io, scrollTarget, onScroll;
+    let io, scrollTarget, onScroll, scrollRaf = 0;
     const wire = () => {
       const sc = getScroller();
       io = new IntersectionObserver(
@@ -431,16 +437,24 @@
       }
       scrollTarget = sc || window;
       onScroll = () => {
-        const el = sc || document.scrollingElement || document.documentElement;
-        if (!el || !index.length) return;
-        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
-        if (atBottom) apply(index[index.length - 1].id);
+        if (scrollRaf) return;
+        scrollRaf = requestAnimationFrame(() => {
+          scrollRaf = 0;
+          const el = sc || document.scrollingElement || document.documentElement;
+          if (!el || !index.length) return;
+          const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+          if (atBottom) apply(index[index.length - 1].id);
+        });
       };
       scrollTarget.addEventListener("scroll", onScroll, { passive: true });
     };
     const teardown = () => {
       if (io) io.disconnect();
       if (scrollTarget) scrollTarget.removeEventListener("scroll", onScroll);
+      if (scrollRaf) {
+        cancelAnimationFrame(scrollRaf);
+        scrollRaf = 0;
+      }
     };
     wire();
     return {
@@ -571,6 +585,11 @@
     if (!contentWrap) return null;
     const tools = ensureToolsRow(contentWrap);
 
+    if (typeof tools._bswDocActionsCleanup === "function") {
+      tools._bswDocActionsCleanup();
+      tools._bswDocActionsCleanup = null;
+    }
+
     // Re-render: drop existing width dropdown + action buttons before
     // re-adding so streaming refreshes don't stack duplicates.
     for (const old of tools.querySelectorAll(
@@ -642,6 +661,8 @@
     // AI dropdown — translate + editorial layout modes.
     let edDropdown = null;
     let edMenu = null;
+    let edExpandBtn = null;
+    let edLangList = null;
     let transDropdown = null;
     let transMenu = null;
     if (opts && typeof opts.onEditorial === "function") {
@@ -711,10 +732,12 @@
           '<span class="bsw-width-option-label">AI Translate</span>';
         transLabel.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          edMenu.hidden = true;
-          edTrigger.setAttribute("aria-expanded", "false");
+          closeAllMenus();
           Promise.resolve(opts.onTranslateWithLang(suggested)).then((res) => {
             if (res && res.error) showToast(edTrigger, res.error);
+          }).catch((err) => {
+            console.warn("[Baseline] translate failed:", err);
+            showToast(edTrigger, (err && err.message) || "Translation failed");
           });
         });
 
@@ -722,12 +745,15 @@
         expandBtn.type = "button";
         expandBtn.className = "bsw-ai-translate-expand";
         expandBtn.setAttribute("aria-label", "选择语言");
+        expandBtn.setAttribute("aria-expanded", "false");
         expandBtn.innerHTML =
           '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>';
 
         const langList = document.createElement("div");
         langList.className = "bsw-ai-lang-list";
         langList.hidden = true;
+        edExpandBtn = expandBtn;
+        edLangList = langList;
 
         var langs = opts.translateLanguages.slice();
         var si = langs.indexOf(suggested);
@@ -743,10 +769,12 @@
           langBtn.querySelector(".bsw-width-option-label").textContent = nativeNames[lang] || lang;
           langBtn.addEventListener("click", (ev) => {
             ev.stopPropagation();
-            edMenu.hidden = true;
-            edTrigger.setAttribute("aria-expanded", "false");
+            closeAllMenus();
             Promise.resolve(opts.onTranslateWithLang(lang)).then((res) => {
               if (res && res.error) showToast(edTrigger, res.error);
+            }).catch((err) => {
+              console.warn("[Baseline] translate failed:", err);
+              showToast(edTrigger, (err && err.message) || "Translation failed");
             });
           });
           langList.appendChild(langBtn);
@@ -756,6 +784,7 @@
           ev.stopPropagation();
           langList.hidden = !langList.hidden;
           expandBtn.classList.toggle("is-open", !langList.hidden);
+          expandBtn.setAttribute("aria-expanded", String(!langList.hidden));
         });
 
         transRow.appendChild(transLabel);
@@ -776,10 +805,12 @@
         item.querySelector(".bsw-width-option-label").textContent = mode.label;
         item.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          edMenu.hidden = true;
-          edTrigger.setAttribute("aria-expanded", "false");
+          closeAllMenus();
           Promise.resolve(opts.onEditorial(mode.value)).then((res) => {
             if (res && res.error) showToast(edTrigger, res.error);
+          }).catch((err) => {
+            console.warn("[Baseline] editorial failed:", err);
+            showToast(edTrigger, (err && err.message) || "Action failed");
           });
         });
         edMenu.appendChild(item);
@@ -830,7 +861,9 @@
         widthTrigger.setAttribute("aria-label", cur.label);
       }
       for (const [v, el] of widthOptionEls) {
-        el.classList.toggle("is-active", v === value);
+        const active = v === value;
+        el.classList.toggle("is-active", active);
+        el.setAttribute("aria-checked", String(active));
       }
     }
     if (withWidthControls && widthOptions.length && opts && typeof opts.onWidthChange === "function") {
@@ -896,7 +929,24 @@
         var et = edDropdown && edDropdown.querySelector(".bsw-width-trigger");
         if (et) et.setAttribute("aria-expanded", "false");
       }
+      if (edLangList && !edLangList.hidden) {
+        edLangList.hidden = true;
+        if (edExpandBtn) {
+          edExpandBtn.classList.remove("is-open");
+          edExpandBtn.setAttribute("aria-expanded", "false");
+        }
+      }
     }
+    const cleanupDocListeners = () => {
+      if (docClickHandler) document.removeEventListener("click", docClickHandler);
+      if (docKeyHandler) document.removeEventListener("keydown", docKeyHandler);
+      document.removeEventListener("bsw:panel-open", closeAllMenus);
+      docClickHandler = null;
+      docKeyHandler = null;
+      if (tools._bswDocActionsCleanup === cleanupDocListeners) {
+        tools._bswDocActionsCleanup = null;
+      }
+    };
     if (widthDropdown || transDropdown || edDropdown) {
       docClickHandler = (ev) => {
         if (widthDropdown && widthDropdown.contains(ev.target)) return;
@@ -910,6 +960,7 @@
       document.addEventListener("click", docClickHandler);
       document.addEventListener("keydown", docKeyHandler);
       document.addEventListener("bsw:panel-open", closeAllMenus);
+      tools._bswDocActionsCleanup = cleanupDocListeners;
     }
 
     // Copy — raw markdown to clipboard.
@@ -940,9 +991,7 @@
 
     return {
       destroy() {
-        if (docClickHandler) document.removeEventListener("click", docClickHandler);
-        if (docKeyHandler) document.removeEventListener("keydown", docKeyHandler);
-        document.removeEventListener("bsw:panel-open", closeAllMenus);
+        cleanupDocListeners();
         for (const el of ownButtons) {
           if (el && el.parentNode) el.parentNode.removeChild(el);
         }
@@ -1351,6 +1400,235 @@
     return { register, unregister, pasteFromClipboard };
   }
 
+  // Single document-level file drag-and-drop router; mirrors bindColumnPaste
+  // so split view (and bilingual view) can drop a .md file directly into the
+  // left or right column instead of letting Chrome navigate the whole tab.
+  const DROP_MD_EXT_RE = /\.(md|markdown|mdown|mkd|txt)$/i;
+  let dropListenerBound = false;
+  const dropRegistry = new Map();
+  let activeDropColumn = null;
+  let dropOverlayEl = null;
+  let dropBadgeEl = null;
+  let dropOnUnsupported = null;
+
+  function hasFileTransfer(e) {
+    const dt = e && e.dataTransfer;
+    if (!dt || !dt.types) return false;
+    for (let i = 0; i < dt.types.length; i++) {
+      if (dt.types[i] === "Files") return true;
+    }
+    return false;
+  }
+
+  function isSupportedDropFile(file) {
+    if (!file) return false;
+    const name = String(file.name || "");
+    if (DROP_MD_EXT_RE.test(name)) return true;
+    const type = String(file.type || "").toLowerCase();
+    if (type === "text/markdown" || type === "text/x-markdown" || type === "text/plain") {
+      return true;
+    }
+    if (type.startsWith("text/") && name && !name.includes(".")) return true;
+    return false;
+  }
+
+  function resolveDropColumn(e) {
+    if (dropRegistry.size === 0) return null;
+    if (dropRegistry.size === 1) return dropRegistry.keys().next().value;
+    const fromTarget = e && e.target && e.target.closest
+      ? e.target.closest(".view-content")
+      : null;
+    if (fromTarget && dropRegistry.has(fromTarget)) return fromTarget;
+    if (e && typeof e.clientX === "number") {
+      let best = null;
+      let bestDist = Infinity;
+      for (const view of dropRegistry.keys()) {
+        const rect = view.getBoundingClientRect && view.getBoundingClientRect();
+        if (!rect || rect.width <= 0) continue;
+        if (e.clientX >= rect.left && e.clientX <= rect.right) return view;
+        const cx = (rect.left + rect.right) / 2;
+        const dist = Math.abs(e.clientX - cx);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = view;
+        }
+      }
+      if (best) return best;
+    }
+    return dropRegistry.keys().next().value;
+  }
+
+  function ensureDropOverlay() {
+    if (dropOverlayEl && dropOverlayEl.isConnected) return dropOverlayEl;
+    const overlay = document.createElement("div");
+    overlay.className = "bsw-drop-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.hidden = true;
+    const frame = document.createElement("div");
+    frame.className = "bsw-drop-frame";
+    const badge = document.createElement("div");
+    badge.className = "bsw-drop-badge";
+    frame.appendChild(badge);
+    overlay.appendChild(frame);
+    document.body.appendChild(overlay);
+    dropOverlayEl = overlay;
+    dropBadgeEl = badge;
+    return overlay;
+  }
+
+  function showDropOverlay(column) {
+    if (!column) {
+      hideDropOverlay();
+      return;
+    }
+    const handlers = dropRegistry.get(column);
+    if (!handlers) {
+      hideDropOverlay();
+      return;
+    }
+    const overlay = ensureDropOverlay();
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    let left = 0;
+    let top = 0;
+    let width = vw;
+    let height = vh;
+    if (column !== document.body && typeof column.getBoundingClientRect === "function") {
+      const rect = column.getBoundingClientRect();
+      left = Math.max(0, Math.round(rect.left));
+      top = Math.max(0, Math.round(rect.top));
+      const right = Math.min(vw, Math.round(rect.right));
+      const bottom = Math.min(vh, Math.round(rect.bottom));
+      width = Math.max(0, right - left);
+      height = Math.max(0, bottom - top);
+    }
+    overlay.style.left = left + "px";
+    overlay.style.top = top + "px";
+    overlay.style.width = width + "px";
+    overlay.style.height = height + "px";
+    const label = typeof handlers.label === "function"
+      ? handlers.label()
+      : (handlers.label || "松开以打开 Markdown 文件");
+    if (dropBadgeEl && dropBadgeEl.textContent !== label) {
+      dropBadgeEl.textContent = label;
+    }
+    overlay.hidden = false;
+    activeDropColumn = column;
+  }
+
+  function hideDropOverlay() {
+    activeDropColumn = null;
+    if (dropOverlayEl) dropOverlayEl.hidden = true;
+  }
+
+  function bindColumnDrop(opts) {
+    if (opts && typeof opts.onUnsupported === "function") {
+      dropOnUnsupported = opts.onUnsupported;
+    }
+
+    function register(viewEl, handlers) {
+      if (!viewEl) return;
+      dropRegistry.set(viewEl, handlers);
+    }
+
+    function unregister(viewEl) {
+      dropRegistry.delete(viewEl);
+      if (activeDropColumn === viewEl) hideDropOverlay();
+    }
+
+    if (!dropListenerBound) {
+      dropListenerBound = true;
+
+      document.addEventListener("dragenter", (e) => {
+        if (dropRegistry.size === 0 || !hasFileTransfer(e)) return;
+        e.preventDefault();
+        const col = resolveDropColumn(e);
+        if (col) showDropOverlay(col);
+      }, true);
+
+      document.addEventListener("dragover", (e) => {
+        if (dropRegistry.size === 0 || !hasFileTransfer(e)) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = "copy"; } catch (_) {}
+        const col = resolveDropColumn(e);
+        if (col) showDropOverlay(col);
+      }, true);
+
+      document.addEventListener("dragleave", (e) => {
+        if (!activeDropColumn) return;
+        const leftViewport = !e.relatedTarget
+          || e.relatedTarget === document.documentElement
+          || e.clientX <= 0 || e.clientY <= 0
+          || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight;
+        if (leftViewport) hideDropOverlay();
+      }, true);
+
+      document.addEventListener("drop", (e) => {
+        if (dropRegistry.size === 0 || !hasFileTransfer(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const col = resolveDropColumn(e) || activeDropColumn;
+        hideDropOverlay();
+        if (!col) return;
+        const handlers = dropRegistry.get(col);
+        if (!handlers || typeof handlers.onDrop !== "function") return;
+
+        const dt = e.dataTransfer;
+        const files = dt && dt.files ? Array.from(dt.files) : [];
+        const items = dt && dt.items ? Array.from(dt.items) : [];
+        // Synchronously capture handle promises before the browser clears
+        // dataTransfer at the end of the drop dispatch turn.
+        const fileItems = items.filter((it) => it && it.kind === "file");
+        const handlePromises = fileItems.map((it) => {
+          if (typeof it.getAsFileSystemHandle === "function") {
+            try {
+              return Promise.resolve(it.getAsFileSystemHandle()).catch(() => null);
+            } catch (_) {
+              return Promise.resolve(null);
+            }
+          }
+          return Promise.resolve(null);
+        });
+
+        let matchIdx = -1;
+        for (let i = 0; i < files.length; i++) {
+          const item = fileItems[i];
+          if (item && typeof item.webkitGetAsEntry === "function") {
+            try {
+              const entry = item.webkitGetAsEntry();
+              if (entry && entry.isDirectory) continue;
+            } catch (_) {}
+          }
+          if (isSupportedDropFile(files[i])) {
+            matchIdx = i;
+            break;
+          }
+        }
+        if (matchIdx === -1) {
+          if (typeof dropOnUnsupported === "function") {
+            dropOnUnsupported(files[0] || null);
+          } else {
+            window.alert("仅支持拖入 Markdown 或文本文件（.md / .markdown / .txt）。");
+          }
+          return;
+        }
+
+        handlers.onDrop({
+          file: files[matchIdx],
+          handlePromise: handlePromises[matchIdx] || Promise.resolve(null)
+        });
+      }, true);
+
+      document.addEventListener("dragend", hideDropOverlay, true);
+      window.addEventListener("blur", hideDropOverlay);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) hideDropOverlay();
+      });
+    }
+
+    return { register, unregister };
+  }
+
   root.BaselineTOC = {
     buildHeadingIndex,
     mountHeadingAnchors,
@@ -1358,6 +1636,7 @@
     mountDocActions,
     mountChrome,
     bindColumnPaste,
+    bindColumnDrop,
     cleanupColumnChrome
   };
 })(typeof window !== "undefined" ? window : globalThis);

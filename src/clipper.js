@@ -17,8 +17,6 @@
 
   if (self.__bswClip) return; // idempotent across repeated injections
 
-  const libs = self.BaselineClipperLibs;
-
   function meta(sel) {
     const el = document.querySelector(sel);
     return (el && (el.getAttribute("content") || "").trim()) || "";
@@ -36,8 +34,15 @@
   // the page. Runs on the detached extraction container, never live DOM.
   function resolveUrls(rootEl) {
     for (const img of rootEl.querySelectorAll("img")) {
-      const raw = img.getAttribute("src") ||
-        img.getAttribute("data-src") || img.getAttribute("data-original") || "";
+      const srcAttr = (img.getAttribute("src") || "").trim();
+      const lazy = (
+        img.getAttribute("data-src") ||
+        img.getAttribute("data-original") ||
+        img.getAttribute("data-lazy-src") || ""
+      ).trim();
+      const raw = (!srcAttr || /^data:/i.test(srcAttr))
+        ? (lazy || srcAttr)
+        : srcAttr;
       if (!raw) { img.remove(); continue; }
       try { img.setAttribute("src", new URL(raw, location.href).href); }
       catch (_) { /* leave as-is */ }
@@ -45,7 +50,8 @@
     }
     for (const a of rootEl.querySelectorAll("a[href]")) {
       const raw = a.getAttribute("href") || "";
-      if (raw.startsWith("#") || raw.startsWith("javascript:")) {
+      const norm = raw.trim().toLowerCase();
+      if (norm.startsWith("#") || norm.startsWith("javascript:") || norm.startsWith("vbscript:")) {
         // In-page anchors are meaningless in the clipped doc — keep text only.
         a.removeAttribute("href");
         continue;
@@ -55,7 +61,7 @@
     }
   }
 
-  function makeTurndown() {
+  function makeTurndown(libs) {
     const td = new libs.TurndownService({
       headingStyle: "atx",
       hr: "---",
@@ -69,8 +75,12 @@
   }
 
   function yamlQuote(v) {
-    return '"' + String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-      .replace(/\r?\n/g, " ").trim() + '"';
+    return '"' + String(v)
+      .replace(/\r?\n/g, " ")
+      .replace(/[\x00-\x1f\x7f]/g, "")
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .trim() + '"';
   }
 
   function isoDate(d) {
@@ -124,7 +134,7 @@
     return { html: box, article: null };
   }
 
-  function clipPage() {
+  function clipPage(libs) {
     // Readability mutates its input — always feed it a clone.
     let article = null;
     try {
@@ -132,25 +142,25 @@
     } catch (e) {
       console.warn("[Baseline clipper] Readability failed:", e);
     }
-    const box = document.createElement("div");
-    if (article && article.content) {
-      box.innerHTML = article.content;
-    } else {
+    const rawHtml = (article && article.content)
+      ? article.content
       // Last resort: whole body clone (noisy, but never empty-handed).
-      box.innerHTML = document.body ? document.body.innerHTML : "";
-    }
+      : (document.body ? document.body.innerHTML : "");
+    const parsedDoc = new DOMParser().parseFromString(rawHtml, "text/html");
+    const box = parsedDoc.body || document.createElement("div");
     resolveUrls(box);
     return { html: box, article };
   }
 
   self.__bswClip = function (mode) {
     try {
+      const libs = self.BaselineClipperLibs;
       if (!libs) {
         return { ok: false, error: "clipper libs missing — reload the extension" };
       }
-      const got = (mode === "selection" && clipSelection()) || clipPage();
+      const got = (mode === "selection" && clipSelection()) || clipPage(libs);
       const info = pageInfo(got.article);
-      const body = makeTurndown().turndown(got.html).trim();
+      const body = makeTurndown(libs).turndown(got.html).trim();
       if (!body) return { ok: false, error: "nothing to clip on this page" };
 
       const markdown =

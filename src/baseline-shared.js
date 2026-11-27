@@ -172,6 +172,8 @@
     return { css: "", classesCommon: [], classesLight: [], classesDark: [] };
   }
 
+  const presetCache = new Map();
+
   async function loadPreset(presetName) {
     if (!presetName || presetName === "default") return emptyPreset();
 
@@ -190,12 +192,23 @@
       }
     }
 
+    if (!/^[a-z0-9-]+$/i.test(presetName)) {
+      console.warn("[Baseline] invalid preset name:", presetName);
+      return null;
+    }
+
+    if (presetCache.has(presetName)) {
+      return presetCache.get(presetName);
+    }
+
     try {
       const url = chrome.runtime.getURL(`presets/${presetName}.json`);
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      return compileFromJSON(json);
+      const compiled = compileFromJSON(json);
+      presetCache.set(presetName, compiled);
+      return compiled;
     } catch (e) {
       console.warn("[Baseline] preset load failed:", e);
       return emptyPreset();
@@ -229,13 +242,21 @@
   // page can't query which is installed, so fire cursor:// and fall back
   // to vscode:// if the window doesn't blur within 500ms.
   function openPathInEditor(path) {
+    const encoded = encodeURI(String(path || ""))
+      .replace(/#/g, "%23")
+      .replace(/\?/g, "%3F");
+    const onBlur = () => {
+      clearTimeout(fallback);
+    };
     const fallback = setTimeout(() => {
-      try { location.href = "vscode://file/" + path; } catch (_) {}
+      window.removeEventListener("blur", onBlur);
+      try { location.href = "vscode://file/" + encoded; } catch (_) {}
     }, 500);
-    window.addEventListener("blur", () => clearTimeout(fallback), { once: true });
-    try { location.href = "cursor://file/" + path; }
+    window.addEventListener("blur", onBlur, { once: true });
+    try { location.href = "cursor://file/" + encoded; }
     catch (e) {
       clearTimeout(fallback);
+      window.removeEventListener("blur", onBlur);
       console.warn("[Baseline] open in editor failed:", e);
     }
   }
@@ -931,7 +952,7 @@
         continue;
       }
       // Skip if this mode already baked successfully (bump when params change).
-      const modeKey = (dark ? "dark" : "light") + ":v8-bright";
+      const modeKey = (dark ? "dark" : "light") + ":v9-seamless";
       if (layer.dataset.bswPaperMode === modeKey && layer.dataset.bswPaperReady === "1") {
         continue;
       }
@@ -996,7 +1017,7 @@
   async function commitPresetTypography(previewEl, presetName, applyPresetFn) {
     syncPresetMarker(presetName);
     const preset = await loadPreset(presetName);
-    if (typeof applyPresetFn === "function") {
+    if (preset && typeof applyPresetFn === "function") {
       await applyPresetFn(preset);
     }
     forceTypographyLock(previewEl);
@@ -1026,7 +1047,7 @@
    * Wrapper that does renderTo then reasserts the lock for the active preset.
    * Grep gate: callers should use this instead of bare renderTo for preview markdown.
    */
-  function renderPreviewMarkdown(mountEl, markdown, presetName) {
+  function renderPreviewMarkdown(mountEl, markdown, presetName, renderOpts) {
     // renderTarget must be the sizer (content container) that renderTo populates with innerHTML.
     // lockTarget is the ancestor view for vars and spacing rules.
     let renderTarget = mountEl;
@@ -1040,7 +1061,7 @@
     if (!renderer || typeof renderer.renderTo !== "function") {
       return Promise.resolve().then(() => reassertTypographyLock(lockTarget, presetName));
     }
-    return renderer.renderTo(markdown, renderTarget).then(() => {
+    return renderer.renderTo(markdown, renderTarget, renderOpts).then(() => {
       reassertTypographyLock(lockTarget, presetName);
       // Empty homepage ↔ document transitions change whether noise is allowed.
       syncPaperNoise(presetName);
@@ -1061,20 +1082,34 @@
   const HANDLE_DB_VERSION = 1;
   const HANDLE_STORE = "handles";
 
+  let handleDbPromise = null;
   function openHandleDB() {
-    return new Promise((resolve, reject) => {
+    if (handleDbPromise) return handleDbPromise;
+    handleDbPromise = new Promise((resolve, reject) => {
       let req;
       try { req = indexedDB.open(HANDLE_DB_NAME, HANDLE_DB_VERSION); }
-      catch (e) { reject(e); return; }
+      catch (e) { handleDbPromise = null; reject(e); return; }
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(HANDLE_STORE)) {
           db.createObjectStore(HANDLE_STORE);
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onclose = () => { handleDbPromise = null; };
+        db.onversionchange = () => {
+          handleDbPromise = null;
+          try { db.close(); } catch (_) {}
+        };
+        resolve(db);
+      };
+      req.onerror = () => {
+        handleDbPromise = null;
+        reject(req.error);
+      };
     });
+    return handleDbPromise;
   }
 
   function withHandleStore(mode, fn) {
@@ -1194,20 +1229,34 @@
   const LIBRARY_STORE = "docs";
   const LIBRARY_LIMIT = 500;
 
+  let libraryDbPromise = null;
   function openLibraryDB() {
-    return new Promise((resolve, reject) => {
+    if (libraryDbPromise) return libraryDbPromise;
+    libraryDbPromise = new Promise((resolve, reject) => {
       let req;
       try { req = indexedDB.open(LIBRARY_DB_NAME, LIBRARY_DB_VERSION); }
-      catch (e) { reject(e); return; }
+      catch (e) { libraryDbPromise = null; reject(e); return; }
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(LIBRARY_STORE)) {
           db.createObjectStore(LIBRARY_STORE, { keyPath: "id" });
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onclose = () => { libraryDbPromise = null; };
+        db.onversionchange = () => {
+          libraryDbPromise = null;
+          try { db.close(); } catch (_) {}
+        };
+        resolve(db);
+      };
+      req.onerror = () => {
+        libraryDbPromise = null;
+        reject(req.error);
+      };
     });
+    return libraryDbPromise;
   }
 
   function withLibraryStore(mode, fn) {
@@ -1522,6 +1571,7 @@
     }
 
     function show() {
+      if (!rootEl.isConnected) return;
       const el = getHoverHintEl();
       el.textContent = text;
       // Position offset from cursor so the hint doesn't sit under the

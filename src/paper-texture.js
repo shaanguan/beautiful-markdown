@@ -69,20 +69,74 @@
     const raw = P.getShaderNoiseTexture();
     noiseReady = (raw.decode ? raw.decode() : Promise.resolve())
       .then(() => raw)
-      .catch(() => loadImage(raw.src));
+      .catch(() => loadImage(raw.src))
+      .catch((err) => {
+        noiseReady = null;
+        throw err;
+      });
     return noiseReady;
   }
 
   function waitFrames(n) {
+    if (typeof document !== "undefined" && document.hidden) {
+      return new Promise((resolve) => setTimeout(resolve, 16));
+    }
     return new Promise((resolve) => {
       let left = n;
       const step = () => {
         left -= 1;
         if (left <= 0) resolve();
+        else if (typeof document !== "undefined" && document.hidden) setTimeout(resolve, 16);
         else requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
     });
+  }
+
+  /**
+   * Mirror the baked texture vertically onto a 2x-height 2D canvas so
+   * `background-repeat: repeat-y` is completely seamless on long documents
+   * (bottom meets bottom, top meets top), then encode synchronously as a
+   * compact WebP data URL (works reliably on file://, chrome-extension://,
+   * and http(s):// without blob:null origin issues).
+   */
+  function canvasToTextureUrl(canvas) {
+    let target = canvas;
+    try {
+      const tw = Math.min(canvas.width, 1280);
+      const th = Math.round((canvas.height / Math.max(canvas.width, 1)) * tw);
+      if (tw >= 2 && th >= 2) {
+        const tiled = document.createElement("canvas");
+        tiled.width = tw;
+        tiled.height = th * 2;
+        const ctx = tiled.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(canvas, 0, 0, tw, th);
+          ctx.save();
+          ctx.translate(0, th * 2);
+          ctx.scale(1, -1);
+          ctx.drawImage(canvas, 0, 0, tw, th);
+          ctx.restore();
+          target = tiled;
+        }
+      }
+    } catch (_) {
+      target = canvas;
+    }
+
+    let dataUrl = "";
+    try {
+      dataUrl = target.toDataURL("image/webp", 0.85);
+    } catch (_) {
+      dataUrl = "";
+    }
+    if (!dataUrl || !dataUrl.startsWith("data:image/webp") || dataUrl.length < 100) {
+      dataUrl = target.toDataURL("image/png");
+    }
+    if (!dataUrl || dataUrl.length < 100) {
+      throw new Error("empty paper texture data URL");
+    }
+    return dataUrl;
   }
 
   /**
@@ -123,7 +177,7 @@
   }
 
   /**
-   * Bake PaperTexture to a PNG data URL.
+   * Bake PaperTexture to a seamless vertically-tileable WebP data URL.
    * @param {number} cssW
    * @param {number} cssH
    * @param {boolean} dark
@@ -133,10 +187,12 @@
     const P = api();
     if (!P) throw new Error("PaperShaders missing");
 
-    // Match docs example size (1280×720); stretch via CSS to the reading view.
-    const w = 1280;
-    const h = Math.max(720, Math.min(1600, Math.round((cssH || 720) * (1280 / Math.max(cssW || 1280, 1)))));
-    const key = (dark ? "d" : "l") + ":" + w + "x" + h + ":v8-bright";
+    // Fixed square (1024×1024) mirrored to 1024×2048 so cache keys stay
+    // stable across document heights, fibers never stretch, and repeat-y
+    // has no visible horizontal seam.
+    const w = 1024;
+    const h = 1024;
+    const key = (dark ? "d" : "l") + ":" + w + "x" + h + ":v9-seamless";
     if (cache.has(key)) return cache.get(key);
 
     // Standalone texture (no flowers.webp filter) — same uniforms as the React demo.
@@ -157,6 +213,7 @@
     document.documentElement.appendChild(host);
 
     let mount = null;
+    let canvas = null;
     try {
       mount = new P.ShaderMount(
         host,
@@ -166,6 +223,7 @@
         0,
         0
       );
+      canvas = mount.canvasElement;
 
       // ResizeObserver is unreliable for offscreen hosts (and in some
       // extension/file:// timings). Force layout size + a draw.
@@ -173,29 +231,35 @@
       mount.parentHeight = h;
       mount.devicePixelsSupported = false;
       if (typeof mount.setMinPixelRatio === "function") {
-        mount.setMinPixelRatio(1.5);
+        mount.setMinPixelRatio(1.25);
       } else if (typeof mount.handleResize === "function") {
         mount.handleResize();
       }
       if (typeof mount.setFrame === "function") mount.setFrame(0);
       await waitFrames(1);
 
-      const canvas = mount.canvasElement;
+      canvas = mount.canvasElement;
       if (!canvas || canvas.width < 2 || canvas.height < 2) {
         throw new Error("PaperTexture canvas has no size (" + (canvas && canvas.width) + "x" + (canvas && canvas.height) + ")");
       }
-      const url = canvas.toDataURL("image/png");
-      if (!url || url.length < 100) throw new Error("empty paper texture data URL");
+      const url = canvasToTextureUrl(canvas);
 
       if (cache.size > 4) {
-        const first = cache.keys().next().value;
-        cache.delete(first);
+        const firstKey = cache.keys().next().value;
+        cache.delete(firstKey);
       }
       cache.set(key, url);
       return url;
     } finally {
       try {
         if (mount) mount.dispose();
+      } catch (_) { /* ignore */ }
+      try {
+        const gl = canvas && canvas.getContext("webgl2");
+        if (gl) {
+          const ext = gl.getExtension("WEBGL_lose_context");
+          if (ext) ext.loseContext();
+        }
       } catch (_) { /* ignore */ }
       try {
         host.remove();
@@ -206,8 +270,7 @@
   /**
    * Apply baked paper texture onto the reading-view layer.
    * @param {HTMLElement} layer
-   * @param {HTMLElement} view
-   * @param {{ dark?: boolean }} [opts]
+   * @param {{ dark?: boolean, view?: HTMLElement }} [opts]
    * @returns {Promise<boolean>}
    */
   async function mountPaperTexture(layer, opts) {
@@ -237,16 +300,17 @@
 
       const cssUrl = 'url("' + url + '")';
       layer.style.backgroundImage = cssUrl;
-      layer.style.backgroundRepeat = "no-repeat";
-      layer.style.backgroundSize = "100% 100%";
+      layer.style.backgroundRepeat = "repeat-y";
+      layer.style.backgroundSize = "100% auto";
       layer.style.backgroundPosition = "top center";
       // Mark as ready (no live WebGL mount).
       layer.dataset.bswPaperReady = "1";
+      // Paint only on .bsw-paper-noise; clear any stale background on .markdown-reading-view.
       if (view) {
-        view.style.backgroundImage = cssUrl;
-        view.style.backgroundRepeat = "no-repeat";
-        view.style.backgroundSize = "100% 100%";
-        view.style.backgroundPosition = "top center";
+        view.style.removeProperty("background-image");
+        view.style.removeProperty("background-size");
+        view.style.removeProperty("background-repeat");
+        view.style.removeProperty("background-position");
       }
       return true;
     } catch (e) {

@@ -31,6 +31,7 @@
  */
 
 importScripts("/src/translator-core.js");
+importScripts("/src/viewer-launch.js");
 
 const Core = self.BaselineTranslatorCore;
 
@@ -49,6 +50,45 @@ const editSessions = new Map();
 // caret in the existing window instead of spawning duplicates.
 const openEditWindows = new Map();
 const SESSION_TTL_MS = 5 * 60 * 1000;
+const EDIT_SESSIONS_STORAGE_KEY = "bswEditSessions";
+const EDIT_WINDOWS_STORAGE_KEY = "bswOpenEditWindows";
+let editStateHydrated = false;
+let editStateHydratePromise = null;
+
+function persistEditState() {
+  try {
+    chrome.storage.session.set({
+      [EDIT_SESSIONS_STORAGE_KEY]: Array.from(editSessions.entries()),
+      [EDIT_WINDOWS_STORAGE_KEY]: Array.from(openEditWindows.entries())
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+async function ensureEditStateHydrated() {
+  if (editStateHydrated) return;
+  if (!editStateHydratePromise) {
+    editStateHydratePromise = (async () => {
+      try {
+        const stored = await chrome.storage.session.get([
+          EDIT_SESSIONS_STORAGE_KEY,
+          EDIT_WINDOWS_STORAGE_KEY
+        ]);
+        if (Array.isArray(stored[EDIT_SESSIONS_STORAGE_KEY])) {
+          for (const [k, v] of stored[EDIT_SESSIONS_STORAGE_KEY]) {
+            if (!editSessions.has(k)) editSessions.set(k, v);
+          }
+        }
+        if (Array.isArray(stored[EDIT_WINDOWS_STORAGE_KEY])) {
+          for (const [k, v] of stored[EDIT_WINDOWS_STORAGE_KEY]) {
+            if (!openEditWindows.has(k)) openEditWindows.set(k, v);
+          }
+        }
+      } catch (_) {}
+      editStateHydrated = true;
+    })();
+  }
+  await editStateHydratePromise;
+}
 
 function editWindowKey(sourceTabId, column) {
   const tab = sourceTabId == null ? "anon" : String(sourceTabId);
@@ -57,12 +97,17 @@ function editWindowKey(sourceTabId, column) {
 }
 
 chrome.windows.onRemoved.addListener((windowId) => {
-  for (const [key, info] of openEditWindows) {
-    if (info && info.windowId === windowId) {
-      openEditWindows.delete(key);
-      if (info.sessionId) editSessions.delete(info.sessionId);
+  ensureEditStateHydrated().then(() => {
+    let changed = false;
+    for (const [key, info] of openEditWindows) {
+      if (info && info.windowId === windowId) {
+        openEditWindows.delete(key);
+        if (info.sessionId) editSessions.delete(info.sessionId);
+        changed = true;
+      }
     }
-  }
+    if (changed) persistEditState();
+  });
 });
 
 function pruneSessions() {
@@ -74,9 +119,14 @@ function pruneSessions() {
 
 function pruneEditSessions() {
   const cutoff = Date.now() - SESSION_TTL_MS;
+  let changed = false;
   for (const [id, s] of editSessions) {
-    if (s.createdAt < cutoff) editSessions.delete(id);
+    if (s.createdAt < cutoff) {
+      editSessions.delete(id);
+      changed = true;
+    }
   }
+  if (changed) persistEditState();
 }
 
 // Toolbar icon → open a blank Beautiful Markdown tab. No default_popup is
@@ -105,29 +155,6 @@ const PASTE_MENU_PATTERNS = [
   chrome.runtime.getURL("viewer.html")
 ];
 
-function registerPasteMenu() {
-  try {
-    chrome.contextMenus.remove(PASTE_MENU_ID, () => {
-      // Swallow lastError — first run there's nothing to remove.
-      void chrome.runtime.lastError;
-      chrome.contextMenus.create({
-        id: PASTE_MENU_ID,
-        title: "Paste Markdown",
-        // Include "editable" because the Open/Viewer pages mark their hero as
-        // contenteditable (so Chrome offers Paste + ⌘V fires a paste event),
-        // which would otherwise hide this menu item there. The page-side
-        // handler (toc.js pasteFromClipboard) bails when the right-click
-        // target is a real <input>/<textarea>, so we don't stomp on form
-        // controls that have their own paste semantics.
-        contexts: ["page", "selection", "link", "image", "video", "audio", "frame", "editable"],
-        documentUrlPatterns: PASTE_MENU_PATTERNS
-      });
-    });
-  } catch (err) {
-    console.warn("[Baseline] registerPasteMenu failed:", err);
-  }
-}
-
 // ── Web clipper（类 Obsidian Web Clipper）───────────────────────────
 //
 // Right-click any http(s) page →「剪藏」→ inject vendor/clipper.js
@@ -146,66 +173,90 @@ const CLIP_SUB_PAGE_MENU_ID = "bsw-clip-sub-page";   // submenu child
 const CLIP_STORE_PREFIX = "bswClip:";
 const CLIP_URL_PATTERNS = ["http://*/*", "https://*/*"];
 
-function registerClipMenus() {
+let menuRegisterInFlight = false;
+let menuRegisterPending = false;
+
+function registerAllMenus() {
+  if (menuRegisterInFlight) {
+    menuRegisterPending = true;
+    return;
+  }
+  menuRegisterInFlight = true;
   const swallow = () => void chrome.runtime.lastError;
-  // Children first, then parents — removing a parent also removes its
-  // children, so this order never double-removes. Recreate after ALL
-  // removals settle (children need the parent to exist at create time).
-  const ids = [
-    CLIP_SELECTION_MENU_ID, CLIP_SUB_PAGE_MENU_ID,
-    CLIP_PARENT_MENU_ID, CLIP_PAGE_MENU_ID
-  ];
-  let pending = ids.length;
-  const createAll = () => {
-    chrome.contextMenus.create({
-      id: CLIP_PAGE_MENU_ID,
-      title: "剪藏整页为 Markdown",
-      contexts: ["page"],
-      documentUrlPatterns: CLIP_URL_PATTERNS
-    }, swallow);
-    chrome.contextMenus.create({
-      id: CLIP_PARENT_MENU_ID,
-      title: "剪藏为 Markdown",
-      contexts: ["selection"],
-      documentUrlPatterns: CLIP_URL_PATTERNS
-    }, () => {
-      if (chrome.runtime.lastError) return; // parent failed → skip children
-      chrome.contextMenus.create({
-        id: CLIP_SELECTION_MENU_ID,
-        parentId: CLIP_PARENT_MENU_ID,
-        title: "选中内容",
-        contexts: ["selection"],
-        documentUrlPatterns: CLIP_URL_PATTERNS
-      }, swallow);
-      chrome.contextMenus.create({
-        id: CLIP_SUB_PAGE_MENU_ID,
-        parentId: CLIP_PARENT_MENU_ID,
-        title: "整页",
-        contexts: ["selection"],
-        documentUrlPatterns: CLIP_URL_PATTERNS
-      }, swallow);
-    });
+  const finish = () => {
+    menuRegisterInFlight = false;
+    if (menuRegisterPending) {
+      menuRegisterPending = false;
+      registerAllMenus();
+    }
   };
   try {
-    for (const id of ids) {
-      chrome.contextMenus.remove(id, () => {
-        swallow();
-        if (--pending === 0) createAll();
+    chrome.contextMenus.removeAll(() => {
+      swallow();
+      chrome.contextMenus.create({
+        id: PASTE_MENU_ID,
+        title: "Paste Markdown",
+        // Include "editable" because the Open/Viewer pages mark their hero as
+        // contenteditable (so Chrome offers Paste + ⌘V fires a paste event),
+        // which would otherwise hide this menu item there. The page-side
+        // handler (toc.js pasteFromClipboard) bails when the right-click
+        // target is a real <input>/<textarea>, so we don't stomp on form
+        // controls that have their own paste semantics.
+        contexts: ["page", "selection", "link", "image", "video", "audio", "frame", "editable"],
+        documentUrlPatterns: PASTE_MENU_PATTERNS
+      }, swallow);
+      chrome.contextMenus.create({
+        id: CLIP_PAGE_MENU_ID,
+        title: "剪藏整页为 Markdown",
+        contexts: ["page"],
+        documentUrlPatterns: CLIP_URL_PATTERNS
+      }, swallow);
+      chrome.contextMenus.create({
+        id: CLIP_PARENT_MENU_ID,
+        title: "剪藏为 Markdown",
+        contexts: ["selection"],
+        documentUrlPatterns: CLIP_URL_PATTERNS
+      }, () => {
+        if (chrome.runtime.lastError) {
+          finish();
+          return; // parent failed → skip children
+        }
+        chrome.contextMenus.create({
+          id: CLIP_SELECTION_MENU_ID,
+          parentId: CLIP_PARENT_MENU_ID,
+          title: "选中内容",
+          contexts: ["selection"],
+          documentUrlPatterns: CLIP_URL_PATTERNS
+        }, swallow);
+        chrome.contextMenus.create({
+          id: CLIP_SUB_PAGE_MENU_ID,
+          parentId: CLIP_PARENT_MENU_ID,
+          title: "整页",
+          contexts: ["selection"],
+          documentUrlPatterns: CLIP_URL_PATTERNS
+        }, () => {
+          swallow();
+          finish();
+        });
       });
-    }
+    });
   } catch (err) {
-    console.warn("[Baseline] registerClipMenus failed:", err);
+    console.warn("[Baseline] registerAllMenus failed:", err);
+    finish();
   }
 }
 
-async function handleClipClick(mode, tab) {
+async function handleClipClick(mode, tab, frameId) {
   const tabId = tab.id;
+  const target = (mode === "selection" && typeof frameId === "number")
+    ? { tabId, frameIds: [frameId] }
+    : { tabId };
   await chrome.scripting.executeScript({
-    target: { tabId },
+    target,
     files: ["vendor/clipper.js", "src/clipper.js"]
   });
   const results = await chrome.scripting.executeScript({
-    target: { tabId },
+    target,
     func: (m) => (self.__bswClip ? self.__bswClip(m) : null),
     args: [mode]
   });
@@ -237,15 +288,8 @@ async function handleClipClick(mode, tab) {
   });
 }
 
-chrome.runtime.onInstalled.addListener(registerPasteMenu);
-chrome.runtime.onStartup.addListener(registerPasteMenu);
-chrome.runtime.onInstalled.addListener(registerClipMenus);
-chrome.runtime.onStartup.addListener(registerClipMenus);
-// Service-worker first-run after browser load may have neither event yet
-// (Chrome lazy-wakes the worker on first message). Idempotent register on
-// top-level eval covers that path.
-registerPasteMenu();
-registerClipMenus();
+chrome.runtime.onInstalled.addListener(registerAllMenus);
+chrome.runtime.onStartup.addListener(registerAllMenus);
 
 const CLIP_MENU_MODES = {
   [CLIP_PAGE_MENU_ID]: "page",
@@ -257,7 +301,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   const clipMode = CLIP_MENU_MODES[info.menuItemId];
   if (clipMode) {
     if (!tab || tab.id == null) return;
-    handleClipClick(clipMode, tab)
+    handleClipClick(clipMode, tab, info.frameId)
       .catch((err) => console.warn("[Baseline] clip failed:", err));
     return;
   }
@@ -266,7 +310,78 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     .catch((err) => console.warn("[Baseline] paste request failed:", err));
 });
 
+function isExtensionSender(sender) {
+  return Boolean(
+    sender &&
+    typeof sender.url === "string" &&
+    sender.url.startsWith(chrome.runtime.getURL(""))
+  );
+}
+
+function sanitizeEditorialFilename(raw, fallback) {
+  const parts = String(raw || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((seg) => seg
+      .replace(/[:*?"<>|\u0000-\u001f]+/g, "")
+      .replace(/^\.+/, "")
+      .trim()
+    )
+    .filter((seg) => seg && seg !== "." && seg !== "..");
+  return parts.length ? parts.join("/") : (fallback || "editorial.html");
+}
+
+function isValidEditorialCacheKey(key) {
+  return typeof key === "string" && /^(?:editorial|ed)[_:.-]/i.test(key);
+}
+
+function createNewEditWindow({
+  msg, column, scrollRatio, scrollOffset, scrollOffsetMatched,
+  selStart, selEnd, sourceTabId, dedupeKey, sendResponse
+}) {
+  const sessionId = crypto.randomUUID();
+  editSessions.set(sessionId, {
+    markdown: msg.markdown == null ? "" : String(msg.markdown),
+    name: msg.name == null ? "" : String(msg.name),
+    column,
+    scrollRatio,
+    scrollOffset,
+    scrollOffsetMatched,
+    selectionStart: selStart,
+    selectionEnd: selEnd,
+    sourceTabId,
+    createdAt: Date.now()
+  });
+  persistEditState();
+  const params = new URLSearchParams({ session: sessionId });
+  if (msg.name) params.set("name", String(msg.name));
+  // Popup window (no tab strip, no address bar) — the editor is a tool,
+  // not a navigable page, and it should feel like a floating panel.
+  // Chrome auto-centers popup windows when left/top are omitted.
+  chrome.windows.create({
+    url: chrome.runtime.getURL("edit.html?" + params.toString()),
+    type: "popup",
+    width: 920,
+    height: 720,
+    focused: true
+  }).then((win) => {
+    const tabId = win && win.tabs && win.tabs[0] ? win.tabs[0].id : null;
+    openEditWindows.set(dedupeKey, {
+      windowId: win.id,
+      tabId,
+      sessionId
+    });
+    persistEditState();
+    sendResponse({ ok: true, sessionId });
+  }).catch((err) => {
+    editSessions.delete(sessionId);
+    persistEditState();
+    sendResponse({ ok: false, error: (err && err.message) || String(err) });
+  });
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
   if (msg && msg.type === "loadMermaid") {
     // Content-script renderers can't reach window.mermaid by injecting a
     // <script> (the bundle would land in the page's main world, not the
@@ -323,7 +438,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg && msg.type === "openEditTab") {
-    pruneEditSessions();
     const selStart = Number.isFinite(msg.selectionStart)
       ? Math.max(0, Math.floor(msg.selectionStart))
       : null;
@@ -339,151 +453,142 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const scrollOffset = Number(msg.scrollOffset) || 0;
     const scrollOffsetMatched = Boolean(msg.scrollOffsetMatched);
 
-    // If an editor window already exists for this (source tab, column),
-    // refocus it and tell the existing editor where to put the caret.
-    // Markdown handling: if the source content / filename changed (user
-    // navigated to a different .md, or pasted new content), push the new
-    // text down so the editor follows. If they match, leave markdown alone
-    // so unsaved typing in the textarea survives the re-trigger.
-    const existing = openEditWindows.get(dedupeKey);
-    if (existing) {
-      const newMarkdown = msg.markdown == null ? "" : String(msg.markdown);
-      const newName = msg.name == null ? "" : String(msg.name);
-      chrome.windows.get(existing.windowId).then((win) => {
-        const s = editSessions.get(existing.sessionId);
-        const documentChanged = !s
-          || s.markdown !== newMarkdown
-          || s.name !== newName;
-        if (s) {
-          if (documentChanged) {
-            s.markdown = newMarkdown;
-            s.name = newName;
-          }
-          s.scrollRatio = scrollRatio;
-          s.scrollOffset = scrollOffset;
-          s.scrollOffsetMatched = scrollOffsetMatched;
-          s.selectionStart = selStart;
-          s.selectionEnd = selEnd;
-          s.createdAt = Date.now();
-        }
-        chrome.windows.update(existing.windowId, {
-          focused: true,
-          drawAttention: true
-        }).catch(() => {});
-        if (existing.tabId != null) {
-          const payload = {
-            type: "baselineEditReposition",
-            sessionId: existing.sessionId,
-            selectionStart: selStart,
-            selectionEnd: selEnd,
-            scrollRatio,
-            scrollOffset,
-            scrollOffsetMatched
-          };
-          if (documentChanged) {
-            payload.markdown = newMarkdown;
-            payload.name = newName;
-          }
-          chrome.tabs.sendMessage(existing.tabId, payload).catch(() => {});
-        }
-        sendResponse({ ok: true, sessionId: existing.sessionId, reused: true });
-      }).catch(() => {
-        // Window vanished between map and lookup (race with onRemoved) —
-        // drop the stale entry and fall through by re-dispatching the open.
-        openEditWindows.delete(dedupeKey);
-        if (existing.sessionId) editSessions.delete(existing.sessionId);
-        chrome.runtime.sendMessage(msg).catch(() => {});
-        sendResponse({ ok: false, error: "stale window, retrying" });
-      });
-      return true;
-    }
+    const openArgs = {
+      msg, column, scrollRatio, scrollOffset, scrollOffsetMatched,
+      selStart, selEnd, sourceTabId, dedupeKey, sendResponse
+    };
 
-    const sessionId = crypto.randomUUID();
-    editSessions.set(sessionId, {
-      markdown: msg.markdown == null ? "" : String(msg.markdown),
-      name: msg.name == null ? "" : String(msg.name),
-      column,
-      scrollRatio,
-      scrollOffset,
-      scrollOffsetMatched,
-      selectionStart: selStart,
-      selectionEnd: selEnd,
-      sourceTabId,
-      createdAt: Date.now()
-    });
-    const params = new URLSearchParams({ session: sessionId });
-    if (msg.name) params.set("name", String(msg.name));
-    // Popup window (no tab strip, no address bar) — the editor is a tool,
-    // not a navigable page, and it should feel like a floating panel.
-    // Chrome auto-centers popup windows when left/top are omitted.
-    chrome.windows.create({
-      url: chrome.runtime.getURL("edit.html?" + params.toString()),
-      type: "popup",
-      width: 920,
-      height: 720,
-      focused: true
-    }).then((win) => {
-      const tabId = win && win.tabs && win.tabs[0] ? win.tabs[0].id : null;
-      openEditWindows.set(dedupeKey, {
-        windowId: win.id,
-        tabId,
-        sessionId
-      });
-      sendResponse({ ok: true, sessionId });
-    }).catch((err) => {
-      editSessions.delete(sessionId);
-      sendResponse({ ok: false, error: (err && err.message) || String(err) });
+    ensureEditStateHydrated().then(() => {
+      pruneEditSessions();
+      // If an editor window already exists for this (source tab, column),
+      // refocus it and tell the existing editor where to put the caret.
+      // Markdown handling: if the source content / filename changed (user
+      // navigated to a different .md, or pasted new content), push the new
+      // text down so the editor follows. If they match, leave markdown alone
+      // so unsaved typing in the textarea survives the re-trigger.
+      const existing = openEditWindows.get(dedupeKey);
+      if (existing) {
+        const newMarkdown = msg.markdown == null ? "" : String(msg.markdown);
+        const newName = msg.name == null ? "" : String(msg.name);
+        chrome.windows.get(existing.windowId).then(() => {
+          const s = editSessions.get(existing.sessionId);
+          const documentChanged = !s
+            || s.markdown !== newMarkdown
+            || s.name !== newName;
+          if (s) {
+            if (documentChanged) {
+              s.markdown = newMarkdown;
+              s.name = newName;
+            }
+            s.scrollRatio = scrollRatio;
+            s.scrollOffset = scrollOffset;
+            s.scrollOffsetMatched = scrollOffsetMatched;
+            s.selectionStart = selStart;
+            s.selectionEnd = selEnd;
+            s.createdAt = Date.now();
+            persistEditState();
+          }
+          chrome.windows.update(existing.windowId, {
+            focused: true,
+            drawAttention: true
+          }).catch(() => {});
+          if (existing.tabId != null) {
+            const payload = {
+              type: "baselineEditReposition",
+              sessionId: existing.sessionId,
+              selectionStart: selStart,
+              selectionEnd: selEnd,
+              scrollRatio,
+              scrollOffset,
+              scrollOffsetMatched
+            };
+            if (documentChanged) {
+              payload.markdown = newMarkdown;
+              payload.name = newName;
+            }
+            chrome.tabs.sendMessage(existing.tabId, payload).catch(() => {});
+          }
+          sendResponse({ ok: true, sessionId: existing.sessionId, reused: true });
+        }).catch(() => {
+          // Window vanished between map and lookup (race with onRemoved) —
+          // drop the stale entry and directly create a fresh editor window.
+          openEditWindows.delete(dedupeKey);
+          if (existing.sessionId) editSessions.delete(existing.sessionId);
+          persistEditState();
+          createNewEditWindow(openArgs);
+        });
+        return;
+      }
+
+      createNewEditWindow(openArgs);
     });
     return true;
   }
   if (msg && msg.type === "getEditSession") {
-    const s = editSessions.get(msg.sessionId);
-    if (!s) {
-      sendResponse({ ok: false, error: "session not found" });
-      return;
-    }
-    sendResponse({
-      ok: true,
-      markdown: s.markdown,
-      name: s.name,
-      scrollRatio: s.scrollRatio,
-      scrollOffset: s.scrollOffset,
-      scrollOffsetMatched: s.scrollOffsetMatched,
-      selectionStart: s.selectionStart == null ? null : s.selectionStart,
-      selectionEnd: s.selectionEnd == null ? null : s.selectionEnd
+    ensureEditStateHydrated().then(() => {
+      const s = editSessions.get(msg.sessionId);
+      if (!s) {
+        sendResponse({ ok: false, error: "session not found" });
+        return;
+      }
+      sendResponse({
+        ok: true,
+        markdown: s.markdown,
+        name: s.name,
+        scrollRatio: s.scrollRatio,
+        scrollOffset: s.scrollOffset,
+        scrollOffsetMatched: s.scrollOffsetMatched,
+        selectionStart: s.selectionStart == null ? null : s.selectionStart,
+        selectionEnd: s.selectionEnd == null ? null : s.selectionEnd
+      });
     });
-    return;
+    return true;
   }
   if (msg && msg.type === "applyEdit") {
-    const s = editSessions.get(msg.sessionId);
-    if (!s) {
-      sendResponse({ ok: false, error: "session not found" });
-      return;
-    }
-    const nextText = msg.text == null ? "" : String(msg.text);
-    s.markdown = nextText;
-    s.createdAt = Date.now();
-    const payload = {
-      type: "baselineEditApplied",
-      text: nextText,
-      name: s.name || "",
-      column: s.column || "main",
-      targetTabId: s.sourceTabId == null ? null : s.sourceTabId
-    };
-    // tabs.sendMessage only reaches content scripts (file:// .md). Extension
-    // pages (open.html) need runtime.sendMessage; listeners filter targetTabId.
-    if (s.sourceTabId != null) {
-      chrome.tabs.sendMessage(s.sourceTabId, payload).catch(() => {});
-    }
-    chrome.runtime.sendMessage(payload).catch(() => {});
-    sendResponse({ ok: true });
-    return;
+    ensureEditStateHydrated().then(() => {
+      const s = editSessions.get(msg.sessionId);
+      if (!s) {
+        sendResponse({ ok: false, error: "session not found" });
+        return;
+      }
+      const nextText = msg.text == null ? "" : String(msg.text);
+      s.markdown = nextText;
+      s.createdAt = Date.now();
+      persistEditState();
+      const payload = {
+        type: "baselineEditApplied",
+        text: nextText,
+        name: s.name || "",
+        column: s.column || "main",
+        targetTabId: s.sourceTabId == null ? null : s.sourceTabId
+      };
+      // tabs.sendMessage only reaches content scripts (file:// .md). Extension
+      // pages (open.html) need runtime.sendMessage; listeners filter targetTabId.
+      if (s.sourceTabId != null) {
+        chrome.tabs.sendMessage(s.sourceTabId, payload).catch(() => {});
+      }
+      chrome.runtime.sendMessage(payload).catch(() => {});
+      sendResponse({ ok: true });
+    });
+    return true;
   }
   if (msg && msg.type === "openCachedEditorial") {
-    var filePath = msg.path;
+    if (!isExtensionSender(sender)) {
+      sendResponse({ ok: false, error: "unauthorized sender" });
+      return;
+    }
+    var filePath = typeof msg.path === "string" ? msg.path : "";
+    if (!filePath || filePath.includes("..") || /[\u0000-\u001f]/.test(filePath) ||
+        !/\.html$/i.test(filePath)) {
+      sendResponse({ ok: false, error: "invalid path" });
+      return;
+    }
     var fileUrl = "file://" + filePath;
     if (msg.mode === "slides") {
-      fetch(fileUrl).then(r => r.text()).then(text => {
+      fetch(fileUrl).then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      }).then(text => {
         chrome.storage.session.set({ slidesHtml: text }, () => {
           chrome.tabs.create({ url: chrome.runtime.getURL("slides-player.html") });
         });
@@ -498,36 +603,73 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg && msg.type === "fetchUrl") {
-    fetch(msg.url)
-      .then(function (res) { return res.text(); })
+    let parsedUrl = null;
+    try { parsedUrl = new URL(String(msg.url || "")); } catch (_) {}
+    const isHttp = parsedUrl && (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:");
+    let isAllowedLocalMd = false;
+    if (parsedUrl && parsedUrl.protocol === "file:") {
+      const senderUrl = (sender && sender.url) || "";
+      const trustedLocalSender = isExtensionSender(sender) ||
+        /^file:\/\/.*\.(md|markdown|mdown|mkd)(?:$|\?|#)/i.test(senderUrl);
+      if (trustedLocalSender) {
+        const rawUrl = String(msg.url || "");
+        let decodedRaw = rawUrl;
+        let decodedPath = "";
+        try { decodedRaw = decodeURIComponent(rawUrl); } catch (_) {}
+        try { decodedPath = decodeURIComponent(parsedUrl.pathname || ""); } catch (_) {}
+        isAllowedLocalMd = Boolean(
+          decodedPath &&
+          !rawUrl.includes("..") &&
+          !decodedRaw.includes("..") &&
+          !decodedPath.includes("..") &&
+          !/[\u0000-\u001f]/.test(decodedPath) &&
+          /\.(md|markdown|mdown|mkd)$/i.test(decodedPath)
+        );
+      }
+    }
+    if (!parsedUrl || (!isHttp && !isAllowedLocalMd)) {
+      sendResponse({ ok: false, error: "disallowed URL scheme" });
+      return;
+    }
+    fetch(parsedUrl.href)
+      .then(function (res) {
+        if (!res.ok && !(parsedUrl.protocol === "file:" && res.status === 0)) {
+          throw new Error("HTTP " + res.status);
+        }
+        return res.text();
+      })
       .then(function (text) { sendResponse({ ok: true, text: text }); })
       .catch(function (err) { sendResponse({ ok: false, error: String(err) }); });
     return true;
   }
   if (msg && msg.type === "openExtensionPage") {
-    var pageUrl = (msg.page || "").startsWith("file://")
-      ? msg.page
-      : chrome.runtime.getURL(msg.page);
-    chrome.tabs.create({ url: pageUrl });
+    var rawPage = String(msg.page || "").trim();
+    if (!rawPage || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(rawPage) ||
+        rawPage.includes("..") || !/^[A-Za-z0-9_/-]+\.html(?:[?#].*)?$/.test(rawPage)) {
+      return;
+    }
+    chrome.tabs.create({ url: chrome.runtime.getURL(rawPage.replace(/^\/+/, "")) });
     return;
   }
   if (msg && msg.type === "downloadEditorial") {
+    var safeFilename = sanitizeEditorialFilename(msg.filename, "editorial.html");
+    var validCacheKey = isValidEditorialCacheKey(msg.cacheKey) ? msg.cacheKey : "";
     var dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(msg.html || "");
     chrome.downloads.download({
       url: dataUrl,
-      filename: msg.filename || "editorial.html",
+      filename: safeFilename,
       saveAs: false,
       conflictAction: "overwrite"
     }, function (downloadId) {
-      if (!downloadId || !msg.cacheKey) return;
+      if (!downloadId || !validCacheKey) return;
       function onDone(delta) {
         if (delta.id !== downloadId) return;
         if (delta.state && delta.state.current === "complete") {
           chrome.downloads.onChanged.removeListener(onDone);
           chrome.downloads.search({ id: downloadId }, function (items) {
-            if (items && items[0] && items[0].filename && msg.cacheKey) {
+            if (items && items[0] && items[0].filename && validCacheKey) {
               var obj = {};
-              obj[msg.cacheKey] = items[0].filename;
+              obj[validCacheKey] = items[0].filename;
               chrome.storage.local.set(obj);
             }
           });
@@ -549,15 +691,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       editorialMode: msg.editorialMode || "slides",
       createdAt: Date.now()
     });
-    const url = (typeof window !== "undefined" && window.ViewerLaunch && window.ViewerLaunch.buildViewerTabUrl)
-    ? window.ViewerLaunch.buildViewerTabUrl(msg)
-    : (chrome.runtime.getURL("viewer.html?session=" + msg.sessionId + (msg.preset ? "&preset=" + msg.preset : "")));
-  chrome.tabs.create({ url }).then(() => sendResponse({ ok: true }))
-    .catch((err) => {
-      sessions.delete(msg.sessionId);
-      sendResponse({ ok: false, error: err && err.message || String(err) });
-    });
-  return true;
+    const url = (typeof self !== "undefined" && self.ViewerLaunch && self.ViewerLaunch.buildViewerTabUrl)
+      ? self.ViewerLaunch.buildViewerTabUrl(msg)
+      : (chrome.runtime.getURL("viewer.html?session=" + msg.sessionId + (msg.preset ? "&preset=" + msg.preset : "")));
+    chrome.tabs.create({ url }).then(() => sendResponse({ ok: true }))
+      .catch((err) => {
+        sessions.delete(msg.sessionId);
+        sendResponse({ ok: false, error: err && err.message || String(err) });
+      });
+    return true;
   }
   if (!msg || msg.type !== "registerAndOpen") return;
   pruneSessions();
@@ -570,8 +712,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // script doesn't need its own chrome.tabs permission (content scripts
   // can't call chrome.tabs.create anyway). Source name + language ride
   // along on the URL so the viewer's Edit button can name its download.
-  const url = (typeof window !== "undefined" && window.ViewerLaunch && window.ViewerLaunch.buildViewerTabUrl)
-    ? window.ViewerLaunch.buildViewerTabUrl(msg)
+  const url = (typeof self !== "undefined" && self.ViewerLaunch && self.ViewerLaunch.buildViewerTabUrl)
+    ? self.ViewerLaunch.buildViewerTabUrl(msg)
     : (chrome.runtime.getURL("viewer.html?session=" + msg.sessionId + (msg.preset ? "&preset=" + msg.preset : "")));
   chrome.tabs.create({ url }).then(() => sendResponse({ ok: true }))
     .catch((err) => {
@@ -582,6 +724,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 chrome.runtime.onConnect.addListener((port) => {
+  if (!port.sender || port.sender.id !== chrome.runtime.id) {
+    try { port.disconnect(); } catch (_) {}
+    return;
+  }
   if (port.name === "translator-session") handleSessionPort(port);
   if (port.name === "editorial-direct") handleEditorialPort(port);
 });
@@ -616,7 +762,7 @@ function wrapSlidesAsStandalone(raw) {
     '#hint.fade{opacity:0}' +
     '\n</style>\n</head>\n<body>\n' +
     '<div id="stage-wrap"><div id="stage">' +
-    '<iframe id="frame" allow="fullscreen"></iframe>' +
+    '<iframe id="frame" sandbox="allow-scripts" allow="fullscreen"></iframe>' +
     '<div id="event-shield" aria-hidden="true"></div>' +
     '</div></div>\n' +
     '<div id="controls" role="toolbar">' +
@@ -661,9 +807,6 @@ function wrapSlidesAsStandalone(raw) {
     'document.addEventListener("mousemove",function(e){if(e.clientY>window.innerHeight-200)sc()});\n' +
     'var sh=document.getElementById("event-shield");if(sh)sh.addEventListener("mousemove",function(e){' +
     'var r=frame.getBoundingClientRect();if(r.top+e.clientY>window.innerHeight-200)sc()});\n' +
-    'frame.addEventListener("load",function(){try{var d=frame.contentDocument;if(!d)return;' +
-    'd.addEventListener("mousemove",function(e){var r=frame.getBoundingClientRect();' +
-    'if(r.top+e.clientY>window.innerHeight-200)sc()});d.addEventListener("keydown",kd)}catch(e){}});\n' +
     'if(typeof ResizeObserver!=="undefined")new ResizeObserver(fit).observe(wrap);' +
     'else window.addEventListener("resize",fit);\n' +
     'var raw=' + escapedData + ';\n' +
@@ -708,23 +851,29 @@ function handleEditorialPort(port) {
             // Download — wrap in standalone player if slides
             var folders = { slides: "AI Slides", report: "AI Report", dashboard: "AI Dashboard" };
             var folder = folders[msg.editorialMode] || "AI Slides";
-            var base = (msg.sourceName || "document").replace(/\.[^.]+$/, "");
+            var base = String(msg.sourceName || "document")
+              .replace(/\.[^.]+$/, "")
+              .replace(/[\\\/:*?"<>|\u0000-\u001f]+/g, "")
+              .replace(/^\.+/, "")
+              .replace(/\.\./g, "")
+              .trim() || "document";
             var dlFilename = "Beautiful Markdown/" + folder + "/" + base + ".html";
             var dlHtml = isSlides ? wrapSlidesAsStandalone(html) : html;
             var dataUrl = "data:text/html;charset=utf-8," + encodeURIComponent(dlHtml);
+            var validCacheKey = isValidEditorialCacheKey(msg.cacheKey) ? msg.cacheKey : "";
             chrome.downloads.download({
               url: dataUrl, filename: dlFilename,
               saveAs: false, conflictAction: "overwrite"
             }, function (downloadId) {
-              if (!downloadId || !msg.cacheKey) return;
+              if (!downloadId || !validCacheKey) return;
               function onDl(delta) {
                 if (delta.id !== downloadId) return;
                 if (delta.state && delta.state.current === "complete") {
                   chrome.downloads.onChanged.removeListener(onDl);
                   chrome.downloads.search({ id: downloadId }, function (items) {
-                    if (items && items[0] && items[0].filename && msg.cacheKey) {
+                    if (items && items[0] && items[0].filename && validCacheKey) {
                       var obj = {};
-                      obj[msg.cacheKey] = items[0].filename;
+                      obj[validCacheKey] = items[0].filename;
                       chrome.storage.local.set(obj);
                     }
                   });
@@ -936,7 +1085,7 @@ async function runEditorial({ markdown, settings, editorialMode }, port, ctx) {
   }
 
   let html = result.output;
-  const fence = html.match(/```(?:html)?\s*\n([\s\S]*?)\n```/);
+  const fence = String(html || "").trim().match(/^```(?:html)?\s*\r?\n([\s\S]*)\r?\n```$/i);
   if (fence) html = fence[1];
 
   safePost(port, { type: "done", text: html });
@@ -967,54 +1116,57 @@ async function streamWithModel({ prompt, systemPrompt, opts, ctx, onChunk, onAct
   let success = false;
   let usedModel = null;
 
-  for (let i = 0; i < models.length; i++) {
-    if (ctx.isCancelled()) {
-      return { success: false, output: "", model: null, error: null };
-    }
-    const model = models[i];
-    output = "";
-
-    const aborter = new AbortController();
-    ctx.registerAborter(aborter);
-
-    const wrappedOnChunk = (delta) => {
-      if (ctx.isCancelled()) return;
-      output += delta;
-      try { onChunk(delta, output); }
-      catch (e) { console.warn("[Baseline] onChunk threw:", e); }
-    };
-
-    try {
-      if (provider === "google") {
-        await streamGoogleAiStudio({
-          prompt, systemPrompt, model, apiKey: opts.apiKey,
-          signal: aborter.signal, onChunk: wrappedOnChunk
-        });
-      } else {
-        await streamOpenAiCompatible({
-          prompt, systemPrompt, model, apiKey: opts.apiKey,
-          baseUrl: opts.baseUrl,
-          signal: aborter.signal, onChunk: wrappedOnChunk,
-          onActivity: onActivity || null
-        });
-      }
-      success = true;
-      usedModel = model;
-      break;
-    } catch (err) {
+  try {
+    for (let i = 0; i < models.length; i++) {
       if (ctx.isCancelled()) {
         return { success: false, output: "", model: null, error: null };
       }
-      lastError = err;
-      // Last model in the list — no point continuing.
-      if (i === models.length - 1) break;
-      // shouldTryFallback bails on auth errors (which would fail identically
-      // on every model). Transient/rate-limit/404s do retry the next model.
-      if (!Core.shouldTryFallback(err)) break;
+      const model = models[i];
+      output = "";
+
+      const aborter = new AbortController();
+      ctx.registerAborter(aborter);
+
+      const wrappedOnChunk = (delta) => {
+        if (ctx.isCancelled()) return;
+        output += delta;
+        try { onChunk(delta, output); }
+        catch (e) { console.warn("[Baseline] onChunk threw:", e); }
+      };
+
+      try {
+        if (provider === "google") {
+          await streamGoogleAiStudio({
+            prompt, systemPrompt, model, apiKey: opts.apiKey,
+            signal: aborter.signal, onChunk: wrappedOnChunk
+          });
+        } else {
+          await streamOpenAiCompatible({
+            prompt, systemPrompt, model, apiKey: opts.apiKey,
+            baseUrl: opts.baseUrl,
+            signal: aborter.signal, onChunk: wrappedOnChunk,
+            onActivity: onActivity || null
+          });
+        }
+        success = true;
+        usedModel = model;
+        break;
+      } catch (err) {
+        if (ctx.isCancelled()) {
+          return { success: false, output: "", model: null, error: null };
+        }
+        lastError = err;
+        // Last model in the list — no point continuing.
+        if (i === models.length - 1) break;
+        // shouldTryFallback bails on auth errors (which would fail identically
+        // on every model). Transient/rate-limit/404s do retry the next model.
+        if (!Core.shouldTryFallback(err)) break;
+      }
     }
+  } finally {
+    clearInterval(keepalive);
   }
 
-  clearInterval(keepalive);
   if (ctx.isCancelled()) {
     return { success: false, output: "", model: null, error: null };
   }
@@ -1054,17 +1206,18 @@ async function cacheKey(markdown, opts) {
   if (!markdown) return "";
   const provider = opts.provider === "openai" ? "openai" : "google";
   const model = opts.model || "";
+  const source = opts.sourceLanguage || "";
   const target = opts.targetLanguage || "";
   const preserve = opts.preserveBlockquotes !== false ? "1" : "0";
   // baseUrl matters for OpenAI-compat because users may point at very
   // different model endpoints (Ollama, OpenRouter, Azure) that produce
   // different outputs; for Google it's a fixed endpoint, so omit it.
   const baseUrl = provider === "openai" ? (opts.baseUrl || "") : "";
-  //   separator so a value containing a literal newline can't
+  // \u0000 separator so a value containing a literal newline can't
   // collide with a different shape (e.g. model="foo\nbar" colliding
   // with model="foo" + target="bar").
-  const input = [provider, model, target, preserve, baseUrl, markdown]
-    .join("\n \n");
+  const input = [provider, model, source, target, preserve, baseUrl, markdown]
+    .join("\n\u0000\n");
   try {
     const buf = new TextEncoder().encode(input);
     const hash = await crypto.subtle.digest("SHA-256", buf);
@@ -1149,6 +1302,49 @@ function byteLength(s) {
   catch (_) { return s.length * 2; } // pessimistic fallback (UTF-16 cap)
 }
 
+const STREAM_INACTIVITY_TIMEOUT_MS = 90_000;
+
+function createInactivityController(parentSignal, timeoutMs) {
+  const controller = new AbortController();
+  let timer = null;
+  let timedOut = false;
+
+  const onParentAbort = () => {
+    if (timer) clearTimeout(timer);
+    controller.abort(parentSignal && parentSignal.reason);
+  };
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      controller.abort(parentSignal.reason);
+    } else {
+      parentSignal.addEventListener("abort", onParentAbort, { once: true });
+    }
+  }
+
+  const reset = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error("Request timed out after inactivity"));
+    }, timeoutMs);
+  };
+
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+    if (parentSignal) {
+      parentSignal.removeEventListener("abort", onParentAbort);
+    }
+  };
+
+  reset();
+  return {
+    signal: controller.signal,
+    reset,
+    cleanup,
+    didTimeout: () => timedOut
+  };
+}
+
 // ── Google AI Studio (streamGenerateContent) ───────────────────────
 
 async function streamGoogleAiStudio({ prompt, systemPrompt, model, apiKey, signal, onChunk }) {
@@ -1157,7 +1353,7 @@ async function streamGoogleAiStudio({ prompt, systemPrompt, model, apiKey, signa
   const url =
     "https://generativelanguage.googleapis.com/v1beta/models/" +
     encodeURIComponent(model) +
-    ":streamGenerateContent?alt=sse&key=" + encodeURIComponent(apiKey);
+    ":streamGenerateContent?alt=sse";
 
   const body = {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -1167,32 +1363,45 @@ async function streamGoogleAiStudio({ prompt, systemPrompt, model, apiKey, signa
     body.systemInstruction = { parts: [{ text: systemPrompt }] };
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal
-  });
+  const timeoutCtrl = createInactivityController(signal, STREAM_INACTIVITY_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      },
+      body: JSON.stringify(body),
+      signal: timeoutCtrl.signal
+    });
 
-  if (!res.ok) {
-    const detail = await safeReadText(res);
-    throw new Error(
-      "Google AI " + res.status + " " + res.statusText +
-      (detail ? " — " + detail.slice(0, 400) : "")
-    );
-  }
-
-  await readSse(res, (data) => {
-    if (data === "[DONE]") return;
-    let json;
-    try { json = JSON.parse(data); } catch (_) { return; }
-    const parts = (json && json.candidates && json.candidates[0]
-                   && json.candidates[0].content
-                   && json.candidates[0].content.parts) || [];
-    for (const p of parts) {
-      if (typeof p.text === "string" && p.text.length) onChunk(p.text);
+    if (!res.ok) {
+      const detail = await safeReadText(res);
+      throw new Error(
+        "Google AI " + res.status + " " + res.statusText +
+        (detail ? " — " + detail.slice(0, 400) : "")
+      );
     }
-  });
+
+    await readSse(res, (data) => {
+      if (data === "[DONE]") return;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { return; }
+      const parts = (json && json.candidates && json.candidates[0]
+                     && json.candidates[0].content
+                     && json.candidates[0].content.parts) || [];
+      for (const p of parts) {
+        if (typeof p.text === "string" && p.text.length) onChunk(p.text);
+      }
+    }, timeoutCtrl.reset);
+  } catch (err) {
+    if (timeoutCtrl.didTimeout()) {
+      throw new Error("Google AI stream timeout after inactivity");
+    }
+    throw err;
+  } finally {
+    timeoutCtrl.cleanup();
+  }
 }
 
 // ── OpenAI-compatible chat.completions ─────────────────────────────
@@ -1215,33 +1424,43 @@ async function streamOpenAiCompatible({ prompt, systemPrompt, model, apiKey, bas
     temperature: 0.2
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + apiKey
-    },
-    body: JSON.stringify(body),
-    signal
-  });
+  const timeoutCtrl = createInactivityController(signal, STREAM_INACTIVITY_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + apiKey
+      },
+      body: JSON.stringify(body),
+      signal: timeoutCtrl.signal
+    });
 
-  if (!res.ok) {
-    const detail = await safeReadText(res);
-    throw new Error(
-      "API " + res.status + " " + res.statusText +
-      (detail ? " — " + detail.slice(0, 400) : "")
-    );
+    if (!res.ok) {
+      const detail = await safeReadText(res);
+      throw new Error(
+        "API " + res.status + " " + res.statusText +
+        (detail ? " — " + detail.slice(0, 400) : "")
+      );
+    }
+
+    await readSse(res, (data) => {
+      if (data === "[DONE]") return;
+      let json;
+      try { json = JSON.parse(data); } catch (_) { return; }
+      if (onActivity) { try { onActivity(); } catch (_) {} }
+      const delta = json && json.choices && json.choices[0]
+                    && json.choices[0].delta && json.choices[0].delta.content;
+      if (typeof delta === "string" && delta.length) onChunk(delta);
+    }, timeoutCtrl.reset);
+  } catch (err) {
+    if (timeoutCtrl.didTimeout()) {
+      throw new Error("API stream timeout after inactivity");
+    }
+    throw err;
+  } finally {
+    timeoutCtrl.cleanup();
   }
-
-  await readSse(res, (data) => {
-    if (data === "[DONE]") return;
-    let json;
-    try { json = JSON.parse(data); } catch (_) { return; }
-    if (onActivity) { try { onActivity(); } catch (_) {} }
-    const delta = json && json.choices && json.choices[0]
-                  && json.choices[0].delta && json.choices[0].delta.content;
-    if (typeof delta === "string" && delta.length) onChunk(delta);
-  });
 }
 
 // ── SSE reader ─────────────────────────────────────────────────────
@@ -1249,7 +1468,8 @@ async function streamOpenAiCompatible({ prompt, systemPrompt, model, apiKey, bas
 // events separated by a blank line, each event composed of one or more
 // "data: ..." lines whose payloads we join with a newline.
 
-async function readSse(res, onData) {
+async function readSse(res, onData, onRawChunk) {
+  if (!res.body) throw new Error("Empty response body");
   const reader = res.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
@@ -1258,6 +1478,7 @@ async function readSse(res, onData) {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (onRawChunk) onRawChunk();
       buffer += decoder.decode(value, { stream: true });
 
       // Drain every complete event in the buffer. Event boundary is
@@ -1271,6 +1492,8 @@ async function readSse(res, onData) {
         emitEvent(event, onData);
       }
     }
+    // Flush any pending multi-byte UTF-8 bytes from the streaming decoder.
+    buffer += decoder.decode();
     // Flush any trailing event without a terminator (some servers cut off
     // the last \n\n on stream close).
     if (buffer.trim()) emitEvent(buffer, onData);

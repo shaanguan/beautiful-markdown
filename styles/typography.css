@@ -259,11 +259,11 @@ html:not([data-bsw-preset]) .app-container .markdown-preview-view.markdown-rende
   color: var(--text-normal, #191a1b) !important;
 }
 
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered p {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered p {
   margin-block: 0 !important;
 }
 
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered p + p {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered p + p {
   margin-top: var(--bsw-typography-paragraph-spacing) !important;
 }
 
@@ -364,7 +364,7 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
   margin-top: 0 !important;
 }
 
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered blockquote {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered blockquote {
   border-inline-start-width: var(--bsw-theme-quote-rule-width) !important;
   padding-left: var(--bsw-typography-quote-padding) !important;
   padding-block: var(--bsw-typography-quote-padding-block) !important;
@@ -388,7 +388,7 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
 /* Paragraph spacing belongs between document blocks, not inside a quote.
  * theme.css already supplies the quote's own padding; keeping p margins here
  * would double the vertical whitespace and make one-line quotes look huge. */
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered blockquote > p {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered blockquote > p {
   margin-block: 0 !important;
 }
 
@@ -404,11 +404,11 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
   border-radius: var(--bsw-theme-component-radius) !important;
   background: var(--bsw-theme-code-surface) !important;
   box-shadow: none !important;
-  font-family: monospace !important;
+  font-family: var(--font-monospace, var(--font-monospace-theme, ui-monospace, "SF Mono", Menlo, Consolas, monospace)) !important;
 }
 
 html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered pre code {
-  font-family: monospace !important;
+  font-family: var(--font-monospace, var(--font-monospace-theme, ui-monospace, "SF Mono", Menlo, Consolas, monospace)) !important;
 }
 
 html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered table {
@@ -421,7 +421,7 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
 
 /* The renderer keeps a wrapper only as an overflow safety boundary. It must
  * not add a second visual box or a second layer of spacing around the table. */
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
   margin-block: var(--bsw-typography-table-margin) !important;
   border: 1px solid var(--bsw-component-border-strong) !important;
   border-radius: var(--bsw-theme-component-radius) !important;
@@ -444,7 +444,7 @@ html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markd
   word-break: normal !important;
 }
 
-html:not([data-bsw-preset="claude"]) .app-container .markdown-preview-view.markdown-rendered table th {
+html:where(:not([data-bsw-preset="claude"])) .app-container .markdown-preview-view.markdown-rendered table th {
   border-bottom-color: var(--bsw-component-border-strong) !important;
   background: var(--bsw-component-surface-subtle) !important;
   font-weight: 600 !important;
@@ -494,21 +494,18 @@ html .app-container .markdown-preview-view.markdown-rendered h4 {
   font-size: var(--bsw-typography-h4-size) !important;
   font-weight: var(--bsw-typography-h4-weight) !important;
   line-height: var(--bsw-typography-h4-line-height) !important;
-  line-height: var(--bsw-typography-h3-line-height) !important;
   margin: var(--bsw-typography-h4-margin-top) 0 var(--bsw-typography-h4-margin-bottom) !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered h5 {
   font-size: var(--bsw-typography-h5-h6-size) !important;
   font-weight: var(--bsw-typography-h5-weight) !important;
   line-height: var(--bsw-typography-h5-line-height) !important;
-  line-height: var(--bsw-typography-h3-line-height) !important;
   margin: var(--bsw-typography-h5-margin-top) 0 var(--bsw-typography-h5-margin-bottom) !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered h6 {
   font-size: var(--bsw-typography-h6-size) !important;
   font-weight: var(--bsw-typography-h6-weight) !important;
   line-height: var(--bsw-typography-h6-line-height) !important;
-  line-height: var(--bsw-typography-h3-line-height) !important;
   margin: var(--bsw-typography-h6-margin-top) 0 var(--bsw-typography-h6-margin-bottom) !important;
 }
 /* All list types share one content indent so prose starts on one edge.
@@ -592,6 +589,9 @@ html .app-container .markdown-preview-view.markdown-rendered blockquote > p {
   font-size: var(--bsw-typography-font-size) !important;
   line-height: var(--bsw-typography-line-height) !important;
 }
+html .app-container .markdown-preview-view.markdown-rendered blockquote > p + p {
+  margin-top: 0.85em !important;
+}
 html .app-container .markdown-preview-view.markdown-rendered pre {
   margin-block: var(--bsw-typography-code-block-margin) !important;
   padding: var(--bsw-typography-code-block-padding) !important;
@@ -610,6 +610,16 @@ html .app-container .markdown-preview-view.markdown-rendered table :is(th,td) {
   padding: 0.5em 0.65em !important;
   overflow-wrap: normal !important;
   word-break: normal !important;
+}
+/* Respect GFM column alignment attributes overridden by theme.css cell defaults. */
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td)[align="left"] {
+  text-align: left !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td)[align="center"] {
+  text-align: center !important;
+}
+html .app-container .markdown-preview-view.markdown-rendered table :is(th,td)[align="right"] {
+  text-align: right !important;
 }
 html .app-container .markdown-preview-view.markdown-rendered .bsw-table-wrap {
   margin-block: var(--bsw-typography-table-margin) !important;
@@ -827,9 +837,6 @@ html[data-bsw-preset="paper"] body .app-container .markdown-preview-view.markdow
 html[data-bsw-preset="paper"] .markdown-reading-view {
   position: relative;
   background-color: var(--background-primary);
-  background-repeat: no-repeat;
-  background-position: top center;
-  background-size: 100% 100%;
 }
 .bsw-paper-noise {
   position: absolute;
@@ -837,9 +844,9 @@ html[data-bsw-preset="paper"] .markdown-reading-view {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background-repeat: no-repeat;
+  background-repeat: repeat-y;
   background-position: top center;
-  background-size: 100% 100%;
+  background-size: 100% auto;
 }
 html[data-bsw-preset="paper"] .markdown-reading-view:has(> .bsw-paper-noise) > :not(.bsw-paper-noise) {
   position: relative;
