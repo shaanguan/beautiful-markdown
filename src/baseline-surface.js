@@ -1989,29 +1989,80 @@
       })
       : null;
 
+    const dropBinder = root.BaselineTOC && root.BaselineTOC.bindColumnDrop
+      ? root.BaselineTOC.bindColumnDrop()
+      : null;
+
+    async function handleDroppedFile(side, payload) {
+      const target = side === "right" ? "right" : "left";
+      if (!confirmDiscardIfDirty(target)) return;
+      const file = payload && payload.file;
+      let handle = null;
+      if (payload && payload.handlePromise) {
+        try {
+          const resolved = await payload.handlePromise;
+          if (resolved && resolved.kind === "file") handle = resolved;
+        } catch (_) { /* non-secure context or permission denied */ }
+      }
+      let text = "";
+      let name = (file && file.name) || (handle && handle.name) || "";
+      try {
+        const readable = file || (handle ? await handle.getFile() : null);
+        if (!readable) return;
+        text = await readable.text();
+        if (!name && readable.name) name = readable.name;
+      } catch (err) {
+        console.warn("[Baseline] dropped file read failed:", err);
+        window.alert("无法读取拖入的文件，请确认拖入的是 Markdown 或文本文件。");
+        return;
+      }
+      if (handle) {
+        recordRecentHandle(handle, name).catch(() => {});
+      }
+      await replaceColumn(target, text, name, {
+        fromLocalFile: true,
+        fileHandle: handle
+      });
+    }
+
     let mainPasteHost = null;
     function syncPasteRegistry() {
-      if (!pasteBinder) return;
       // Slim scaffold has no .view-content yet, so ⌘V / right-click → Paste
-      // has no registered column to route to. Fall back to document.body so
-      // the size-1 path in resolvePasteColumn picks it up; swap to the real
-      // mainView once upgradeToFullScaffold builds it.
+      // and file drop fall back to document.body; swap to the real mainView
+      // once upgradeToFullScaffold builds it.
       const desired = mainView || document.body;
       if (mainPasteHost && mainPasteHost !== desired) {
-        pasteBinder.unregister(mainPasteHost);
+        if (pasteBinder) pasteBinder.unregister(mainPasteHost);
+        if (dropBinder) dropBinder.unregister(mainPasteHost);
       }
       mainPasteHost = desired;
-      pasteBinder.register(desired, {
-        hasContent: () => Boolean(leftMarkdown && leftMarkdown.trim()),
-        onPaste: (text) => { replaceColumn("left", text, "Pasted content"); }
-      });
-      if (splitOn && splitView) {
-        pasteBinder.register(splitView, {
-          hasContent: () => Boolean(splitMountEl && splitMarkdown && splitMarkdown.trim()),
-          onPaste: (text) => { replaceColumn("right", text, "Pasted content"); }
+      if (pasteBinder) {
+        pasteBinder.register(desired, {
+          hasContent: () => Boolean(leftMarkdown && leftMarkdown.trim()),
+          onPaste: (text) => { replaceColumn("left", text, "Pasted content"); }
         });
-      } else if (splitView) {
-        pasteBinder.unregister(splitView);
+        if (splitOn && splitView) {
+          pasteBinder.register(splitView, {
+            hasContent: () => Boolean(splitMountEl && splitMarkdown && splitMarkdown.trim()),
+            onPaste: (text) => { replaceColumn("right", text, "Pasted content"); }
+          });
+        } else if (splitView) {
+          pasteBinder.unregister(splitView);
+        }
+      }
+      if (dropBinder) {
+        dropBinder.register(desired, {
+          label: () => (splitOn ? "松开以在左栏打开" : "松开以打开 Markdown 文件"),
+          onDrop: (payload) => { handleDroppedFile("left", payload); }
+        });
+        if (splitOn && splitView) {
+          dropBinder.register(splitView, {
+            label: "松开以在右栏打开",
+            onDrop: (payload) => { handleDroppedFile("right", payload); }
+          });
+        } else if (splitView) {
+          dropBinder.unregister(splitView);
+        }
       }
     }
 
@@ -2167,6 +2218,7 @@
         splitView.classList.remove("bsw-open-empty-clickable");
         splitView.removeAttribute("title");
         if (pasteBinder) pasteBinder.unregister(splitView);
+        if (dropBinder) dropBinder.unregister(splitView);
         if (splitView.parentNode) splitView.parentNode.removeChild(splitView);
       }
       splitView = null;

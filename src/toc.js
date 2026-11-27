@@ -1400,6 +1400,235 @@
     return { register, unregister, pasteFromClipboard };
   }
 
+  // Single document-level file drag-and-drop router; mirrors bindColumnPaste
+  // so split view (and bilingual view) can drop a .md file directly into the
+  // left or right column instead of letting Chrome navigate the whole tab.
+  const DROP_MD_EXT_RE = /\.(md|markdown|mdown|mkd|txt)$/i;
+  let dropListenerBound = false;
+  const dropRegistry = new Map();
+  let activeDropColumn = null;
+  let dropOverlayEl = null;
+  let dropBadgeEl = null;
+  let dropOnUnsupported = null;
+
+  function hasFileTransfer(e) {
+    const dt = e && e.dataTransfer;
+    if (!dt || !dt.types) return false;
+    for (let i = 0; i < dt.types.length; i++) {
+      if (dt.types[i] === "Files") return true;
+    }
+    return false;
+  }
+
+  function isSupportedDropFile(file) {
+    if (!file) return false;
+    const name = String(file.name || "");
+    if (DROP_MD_EXT_RE.test(name)) return true;
+    const type = String(file.type || "").toLowerCase();
+    if (type === "text/markdown" || type === "text/x-markdown" || type === "text/plain") {
+      return true;
+    }
+    if (type.startsWith("text/") && name && !name.includes(".")) return true;
+    return false;
+  }
+
+  function resolveDropColumn(e) {
+    if (dropRegistry.size === 0) return null;
+    if (dropRegistry.size === 1) return dropRegistry.keys().next().value;
+    const fromTarget = e && e.target && e.target.closest
+      ? e.target.closest(".view-content")
+      : null;
+    if (fromTarget && dropRegistry.has(fromTarget)) return fromTarget;
+    if (e && typeof e.clientX === "number") {
+      let best = null;
+      let bestDist = Infinity;
+      for (const view of dropRegistry.keys()) {
+        const rect = view.getBoundingClientRect && view.getBoundingClientRect();
+        if (!rect || rect.width <= 0) continue;
+        if (e.clientX >= rect.left && e.clientX <= rect.right) return view;
+        const cx = (rect.left + rect.right) / 2;
+        const dist = Math.abs(e.clientX - cx);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = view;
+        }
+      }
+      if (best) return best;
+    }
+    return dropRegistry.keys().next().value;
+  }
+
+  function ensureDropOverlay() {
+    if (dropOverlayEl && dropOverlayEl.isConnected) return dropOverlayEl;
+    const overlay = document.createElement("div");
+    overlay.className = "bsw-drop-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.hidden = true;
+    const frame = document.createElement("div");
+    frame.className = "bsw-drop-frame";
+    const badge = document.createElement("div");
+    badge.className = "bsw-drop-badge";
+    frame.appendChild(badge);
+    overlay.appendChild(frame);
+    document.body.appendChild(overlay);
+    dropOverlayEl = overlay;
+    dropBadgeEl = badge;
+    return overlay;
+  }
+
+  function showDropOverlay(column) {
+    if (!column) {
+      hideDropOverlay();
+      return;
+    }
+    const handlers = dropRegistry.get(column);
+    if (!handlers) {
+      hideDropOverlay();
+      return;
+    }
+    const overlay = ensureDropOverlay();
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    let left = 0;
+    let top = 0;
+    let width = vw;
+    let height = vh;
+    if (column !== document.body && typeof column.getBoundingClientRect === "function") {
+      const rect = column.getBoundingClientRect();
+      left = Math.max(0, Math.round(rect.left));
+      top = Math.max(0, Math.round(rect.top));
+      const right = Math.min(vw, Math.round(rect.right));
+      const bottom = Math.min(vh, Math.round(rect.bottom));
+      width = Math.max(0, right - left);
+      height = Math.max(0, bottom - top);
+    }
+    overlay.style.left = left + "px";
+    overlay.style.top = top + "px";
+    overlay.style.width = width + "px";
+    overlay.style.height = height + "px";
+    const label = typeof handlers.label === "function"
+      ? handlers.label()
+      : (handlers.label || "松开以打开 Markdown 文件");
+    if (dropBadgeEl && dropBadgeEl.textContent !== label) {
+      dropBadgeEl.textContent = label;
+    }
+    overlay.hidden = false;
+    activeDropColumn = column;
+  }
+
+  function hideDropOverlay() {
+    activeDropColumn = null;
+    if (dropOverlayEl) dropOverlayEl.hidden = true;
+  }
+
+  function bindColumnDrop(opts) {
+    if (opts && typeof opts.onUnsupported === "function") {
+      dropOnUnsupported = opts.onUnsupported;
+    }
+
+    function register(viewEl, handlers) {
+      if (!viewEl) return;
+      dropRegistry.set(viewEl, handlers);
+    }
+
+    function unregister(viewEl) {
+      dropRegistry.delete(viewEl);
+      if (activeDropColumn === viewEl) hideDropOverlay();
+    }
+
+    if (!dropListenerBound) {
+      dropListenerBound = true;
+
+      document.addEventListener("dragenter", (e) => {
+        if (dropRegistry.size === 0 || !hasFileTransfer(e)) return;
+        e.preventDefault();
+        const col = resolveDropColumn(e);
+        if (col) showDropOverlay(col);
+      }, true);
+
+      document.addEventListener("dragover", (e) => {
+        if (dropRegistry.size === 0 || !hasFileTransfer(e)) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = "copy"; } catch (_) {}
+        const col = resolveDropColumn(e);
+        if (col) showDropOverlay(col);
+      }, true);
+
+      document.addEventListener("dragleave", (e) => {
+        if (!activeDropColumn) return;
+        const leftViewport = !e.relatedTarget
+          || e.relatedTarget === document.documentElement
+          || e.clientX <= 0 || e.clientY <= 0
+          || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight;
+        if (leftViewport) hideDropOverlay();
+      }, true);
+
+      document.addEventListener("drop", (e) => {
+        if (dropRegistry.size === 0 || !hasFileTransfer(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const col = resolveDropColumn(e) || activeDropColumn;
+        hideDropOverlay();
+        if (!col) return;
+        const handlers = dropRegistry.get(col);
+        if (!handlers || typeof handlers.onDrop !== "function") return;
+
+        const dt = e.dataTransfer;
+        const files = dt && dt.files ? Array.from(dt.files) : [];
+        const items = dt && dt.items ? Array.from(dt.items) : [];
+        // Synchronously capture handle promises before the browser clears
+        // dataTransfer at the end of the drop dispatch turn.
+        const fileItems = items.filter((it) => it && it.kind === "file");
+        const handlePromises = fileItems.map((it) => {
+          if (typeof it.getAsFileSystemHandle === "function") {
+            try {
+              return Promise.resolve(it.getAsFileSystemHandle()).catch(() => null);
+            } catch (_) {
+              return Promise.resolve(null);
+            }
+          }
+          return Promise.resolve(null);
+        });
+
+        let matchIdx = -1;
+        for (let i = 0; i < files.length; i++) {
+          const item = fileItems[i];
+          if (item && typeof item.webkitGetAsEntry === "function") {
+            try {
+              const entry = item.webkitGetAsEntry();
+              if (entry && entry.isDirectory) continue;
+            } catch (_) {}
+          }
+          if (isSupportedDropFile(files[i])) {
+            matchIdx = i;
+            break;
+          }
+        }
+        if (matchIdx === -1) {
+          if (typeof dropOnUnsupported === "function") {
+            dropOnUnsupported(files[0] || null);
+          } else {
+            window.alert("仅支持拖入 Markdown 或文本文件（.md / .markdown / .txt）。");
+          }
+          return;
+        }
+
+        handlers.onDrop({
+          file: files[matchIdx],
+          handlePromise: handlePromises[matchIdx] || Promise.resolve(null)
+        });
+      }, true);
+
+      document.addEventListener("dragend", hideDropOverlay, true);
+      window.addEventListener("blur", hideDropOverlay);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) hideDropOverlay();
+      });
+    }
+
+    return { register, unregister };
+  }
+
   root.BaselineTOC = {
     buildHeadingIndex,
     mountHeadingAnchors,
@@ -1407,6 +1636,7 @@
     mountDocActions,
     mountChrome,
     bindColumnPaste,
+    bindColumnDrop,
     cleanupColumnChrome
   };
 })(typeof window !== "undefined" ? window : globalThis);

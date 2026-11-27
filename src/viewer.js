@@ -770,6 +770,10 @@
         if (rightView) pasteBinder.unregister(rightView);
         if (leftView) pasteBinder.unregister(leftView);
       }
+      if (dropBinder) {
+        if (rightView) dropBinder.unregister(rightView);
+        if (leftView) dropBinder.unregister(leftView);
+      }
       document.getElementById("baseline-switcher")?.remove();
       document.getElementById("bsw-viewer-status")?.remove();
       document.querySelector(".app-container")?.remove();
@@ -841,19 +845,63 @@
       })
       : null;
 
+    const dropBinder = window.BaselineTOC && window.BaselineTOC.bindColumnDrop
+      ? window.BaselineTOC.bindColumnDrop()
+      : null;
+
+    async function handleViewerDroppedFile(payload) {
+      if (handedOff || !payload) return;
+      let handle = null;
+      if (payload.handlePromise) {
+        try {
+          const resolved = await payload.handlePromise;
+          if (resolved && resolved.kind === "file") handle = resolved;
+        } catch (_) {}
+      }
+      const readable = payload.file || (handle ? await handle.getFile().catch(() => null) : null);
+      if (!readable) return;
+      try {
+        const text = await readable.text();
+        const name = (payload.file && payload.file.name) || (handle && handle.name) || "";
+        if (handle && window.BaselineShared && typeof window.BaselineShared.recordRecentHandle === "function") {
+          window.BaselineShared.recordRecentHandle(handle, name).catch(() => {});
+        }
+        ingestMarkdown(text, name);
+      } catch (err) {
+        console.warn("[Baseline] dropped file read failed:", err);
+        window.alert("无法读取拖入的文件，请确认拖入的是 Markdown 或文本文件。");
+      }
+    }
+
     function syncPasteRegistry() {
-      if (handedOff || !pasteBinder || !rightView) return;
-      pasteBinder.register(rightView, {
-        hasContent: () => Boolean((rightMarkdown || lastText || "").trim()),
-        onPaste: (text) => { ingestMarkdown(text, "Pasted content"); }
-      });
-      if (bilingualOn && leftView) {
-        pasteBinder.register(leftView, {
-          hasContent: () => Boolean(originalMarkdown && originalMarkdown.trim()),
+      if (handedOff || !rightView) return;
+      if (pasteBinder) {
+        pasteBinder.register(rightView, {
+          hasContent: () => Boolean((rightMarkdown || lastText || "").trim()),
           onPaste: (text) => { ingestMarkdown(text, "Pasted content"); }
         });
-      } else if (leftView) {
-        pasteBinder.unregister(leftView);
+        if (bilingualOn && leftView) {
+          pasteBinder.register(leftView, {
+            hasContent: () => Boolean(originalMarkdown && originalMarkdown.trim()),
+            onPaste: (text) => { ingestMarkdown(text, "Pasted content"); }
+          });
+        } else if (leftView) {
+          pasteBinder.unregister(leftView);
+        }
+      }
+      if (dropBinder) {
+        dropBinder.register(rightView, {
+          label: "松开以打开 Markdown 文件",
+          onDrop: handleViewerDroppedFile
+        });
+        if (bilingualOn && leftView) {
+          dropBinder.register(leftView, {
+            label: "松开以打开 Markdown 文件",
+            onDrop: handleViewerDroppedFile
+          });
+        } else if (leftView) {
+          dropBinder.unregister(leftView);
+        }
       }
     }
 
@@ -1042,6 +1090,7 @@
         leftChromeHandle = null;
       }
       if (leftView && pasteBinder) pasteBinder.unregister(leftView);
+      if (leftView && dropBinder) dropBinder.unregister(leftView);
       if (leftView && leftView.parentNode) leftView.parentNode.removeChild(leftView);
       leftView = null;
       leftMountEl = null;
